@@ -22,15 +22,33 @@ In pooled nanopore sequencing experiments, multiple samples are combined and seq
 
 ## Installation
 
-### Requirements
+### Option 1: Docker (Recommended)
 
+The easiest way to run NanoDemux is using Docker:
+
+```bash
+# Build the Docker image
+docker build -t nanodemux .
+
+# Run with your data
+docker run --rm -v "$(pwd)":/data nanodemux \
+  input.fastq barcodes.csv --outdir output --cpus 4
+```
+
+See [DOCKER.md](DOCKER.md) for detailed Docker usage instructions.
+
+### Option 2: Direct Python Installation
+
+Requirements:
 - Python 3.6+
 - Biopython
 - pandas
 
-### Install dependencies
+Install dependencies:
 
 ```bash
+pip install -r requirements.txt
+# or
 pip install biopython pandas
 ```
 
