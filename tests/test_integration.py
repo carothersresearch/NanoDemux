@@ -180,6 +180,7 @@ class TestProcessChunk(unittest.TestCase):
         rec.letter_annotations["phred_quality"] = [40] * 200
         records = [rec]
         
+        # Args: (chunk, row_map, col_map, min_length, max_penalty, flank, adapters)
         args = (records, self.row_map, self.col_map, 50, 60, 100, [])
         stats, reads = process_chunk(args)
         
@@ -194,6 +195,7 @@ class TestProcessChunk(unittest.TestCase):
             rec.letter_annotations["phred_quality"] = [40] * 200
             records.append(rec)
         
+        # Args: (chunk, row_map, col_map, min_length, max_penalty, flank, adapters)
         args = (records, self.row_map, self.col_map, 50, 60, 100, [])
         stats, reads = process_chunk(args)
         
@@ -219,6 +221,9 @@ class TestMultiFileProcessing(unittest.TestCase):
     def tearDown(self):
         """Clean up temporary files."""
         shutil.rmtree(self.temp_dir)
+        # Clean up demplex_data directory if it exists
+        if os.path.exists("demplex_data"):
+            shutil.rmtree("demplex_data")
 
     def _create_barcode_csv(self):
         """Create a test barcode CSV file."""
@@ -269,9 +274,6 @@ class TestMultiFileProcessing(unittest.TestCase):
             # Check that stats file was created
             stats_file = os.path.join(file_dir, "barcode_stats.csv")
             self.assertTrue(os.path.isfile(stats_file), f"Stats file should exist for test_{file_num}")
-        
-        # Cleanup
-        shutil.rmtree("demplex_data")
 
     def test_single_file_default_output(self):
         """Test that single file processing uses demplex_data/<filename> structure."""
@@ -294,9 +296,6 @@ class TestMultiFileProcessing(unittest.TestCase):
         # Check that stats file was created
         stats_file = os.path.join(expected_dir, "barcode_stats.csv")
         self.assertTrue(os.path.isfile(stats_file), "Stats file should exist")
-        
-        # Cleanup
-        shutil.rmtree("demplex_data")
 
     def test_single_file_custom_output(self):
         """Test that single file processing respects custom outdir."""

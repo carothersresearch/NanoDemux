@@ -21,6 +21,23 @@ def revcomp(seq):
 def int_defaultdict():
     return defaultdict(int)
 
+def get_basename_without_extensions(filename):
+    """
+    Remove common FASTQ extensions from filename, handling double extensions.
+    Examples:
+        sample.fastq -> sample
+        sample.fq -> sample
+        sample.fastq.gz -> sample
+        sample.fq.gz -> sample
+    """
+    basename = os.path.basename(filename)
+    # Remove known FASTQ extensions
+    for ext in ['.fastq.gz', '.fq.gz', '.fastq', '.fq']:
+        if basename.endswith(ext):
+            return basename[:-len(ext)]
+    # Fallback to standard splitext if no known extension found
+    return os.path.splitext(basename)[0]
+
 def match_barcode_ends_weighted(seq, qual, barcode, max_penalty=60, flank=20):
     """
     Match barcode at either end of the read using quality-weighted mismatches.
@@ -220,22 +237,6 @@ def write_barcode_grid_csv(stats, outpath):
         rows.append(row)
     row_i = [stats['col_only'][col] for col in range(1, 13)] + [0]
     rows.append(row_i)
-    g = stats['GLOBAL']
-    total_row = ['total','length_ok','mapped','single','no_match','too_short'] + [''] * 7
-    rows.append(total_row)
-    total_row = [g['total'], g['length_ok'], g['mapped'], g['single'], g['no_match'], g['too_short']] + [''] * 7
-    rows.append(total_row)
-    df = pd.DataFrame(rows, index=list('ABCDEFGH') + ['X', 'Stats',''], columns=[*map(str, range(1, 13)), 'X'])
-    df.to_csv(outpath)
-
-def write_barcode_grid_csv(stats, outpath):
-    rows = []
-    for letter in "ABCDEFGH":
-        row = [stats[f"{letter}{col}"]["both"] for col in range(1, 13)]
-        row.append(stats['row_only'][letter])
-        rows.append(row)
-    row_i = [stats['col_only'][col] for col in range(1, 13)] + [0]
-    rows.append(row_i)
 
     # Add ambiguous counts row
     ambiguous = stats.get('ambiguous', {})
@@ -256,6 +257,7 @@ def write_barcode_grid_csv(stats, outpath):
 
     df = pd.DataFrame(rows, index=list('ABCDEFGH') + ['X', 'Stats',''], columns=[*map(str, range(1, 13)), 'X'])
     df.to_csv(outpath)
+
 # ---------------------------------
 # Main
 # ---------------------------------
@@ -311,7 +313,7 @@ def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank,
         # Single file mode - use outdir as-is or adjust if not specified
         if outdir == "demuxed":
             # Default behavior: extract filename without extension
-            basename = os.path.splitext(os.path.basename(fastq_input))[0]
+            basename = get_basename_without_extensions(fastq_input)
             outdir = os.path.join("demplex_data", basename)
         print(f"Processing single file: {fastq_input}")
         process_single_file(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file)
@@ -319,10 +321,9 @@ def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank,
         # Directory mode - process all FASTQ files
         print(f"Processing directory: {fastq_input}")
         # Find all FASTQ files in the directory
-        fastq_files = glob.glob(os.path.join(fastq_input, "*.fastq")) + \
-                      glob.glob(os.path.join(fastq_input, "*.fq")) + \
-                      glob.glob(os.path.join(fastq_input, "*.fastq.gz")) + \
-                      glob.glob(os.path.join(fastq_input, "*.fq.gz"))
+        fastq_files = []
+        for ext in ['*.fastq', '*.fq', '*.fastq.gz', '*.fq.gz']:
+            fastq_files.extend(glob.glob(os.path.join(fastq_input, ext)))
         
         if not fastq_files:
             print(f"⚠️  No FASTQ files found in {fastq_input}")
@@ -335,7 +336,7 @@ def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank,
         print(f"Found {len(fastq_files)} FASTQ file(s)")
         for fastq_file in fastq_files:
             # Create output directory for each file
-            file_basename = os.path.splitext(os.path.basename(fastq_file))[0]
+            file_basename = get_basename_without_extensions(fastq_file)
             file_outdir = os.path.join(base_outdir, file_basename)
             print(f"\n📂 Processing: {os.path.basename(fastq_file)}")
             process_single_file(fastq_file, barcode_csv, file_outdir, min_length, max_penalty, cpus, flank, adapter_file)
