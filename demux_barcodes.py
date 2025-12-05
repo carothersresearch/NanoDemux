@@ -7,6 +7,7 @@ import pandas as pd
 from collections import defaultdict
 import os
 from multiprocessing import Pool
+import glob
 
 
 
@@ -259,7 +260,12 @@ def write_barcode_grid_csv(stats, outpath):
 # Main
 # ---------------------------------
 
-def main(fastq_file, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None):
+# ---------------------------------
+# Process a single FASTQ file
+# ---------------------------------
+
+def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None):
+    """Process a single FASTQ file and demultiplex reads."""
     os.makedirs(outdir, exist_ok=True)
     row_map, col_map = load_barcodes(barcode_csv)
     adapters = load_adapters(adapter_file) if adapter_file else []
@@ -280,32 +286,94 @@ def main(fastq_file, barcode_csv, outdir, min_length, max_penalty, cpus, flank, 
 
     # Save stats grid
     write_barcode_grid_csv(all_stats, os.path.join(outdir, "barcode_stats.csv"))
-    print("✅ Done.")
+    print(f"✅ Processed {fastq_file}")
+
+# ---------------------------------
+# Main function - handles both files and directories
+# ---------------------------------
+
+def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None):
+    """
+    Main entry point that handles both single files and directories.
+    
+    Parameters:
+        fastq_input: Path to either a FASTQ file or a directory containing FASTQ files
+        barcode_csv: CSV file with barcode-to-well mappings
+        outdir: Base output directory (will be adjusted for directory inputs)
+        min_length: Minimum read length
+        max_penalty: Maximum quality-weighted mismatch penalty
+        cpus: Number of CPU cores
+        flank: Number of bases at each end to search
+        adapter_file: Optional adapter file
+    """
+    # Check if input is a file or directory
+    if os.path.isfile(fastq_input):
+        # Single file mode - use outdir as-is or adjust if not specified
+        if outdir == "demuxed":
+            # Default behavior: extract filename without extension
+            basename = os.path.splitext(os.path.basename(fastq_input))[0]
+            outdir = os.path.join("demplex_data", basename)
+        print(f"Processing single file: {fastq_input}")
+        process_single_file(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file)
+    elif os.path.isdir(fastq_input):
+        # Directory mode - process all FASTQ files
+        print(f"Processing directory: {fastq_input}")
+        # Find all FASTQ files in the directory
+        fastq_files = glob.glob(os.path.join(fastq_input, "*.fastq")) + \
+                      glob.glob(os.path.join(fastq_input, "*.fq")) + \
+                      glob.glob(os.path.join(fastq_input, "*.fastq.gz")) + \
+                      glob.glob(os.path.join(fastq_input, "*.fq.gz"))
+        
+        if not fastq_files:
+            print(f"⚠️  No FASTQ files found in {fastq_input}")
+            return
+        
+        # Get the directory name for output structure
+        dir_basename = os.path.basename(os.path.normpath(fastq_input))
+        base_outdir = os.path.join("demplex_data", dir_basename)
+        
+        print(f"Found {len(fastq_files)} FASTQ file(s)")
+        for fastq_file in fastq_files:
+            # Create output directory for each file
+            file_basename = os.path.splitext(os.path.basename(fastq_file))[0]
+            file_outdir = os.path.join(base_outdir, file_basename)
+            print(f"\n📂 Processing: {os.path.basename(fastq_file)}")
+            process_single_file(fastq_file, barcode_csv, file_outdir, min_length, max_penalty, cpus, flank, adapter_file)
+        
+        print(f"\n✅ All files processed. Output in: {base_outdir}")
+    else:
+        raise ValueError(f"Input path does not exist: {fastq_input}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Demultiplex and analyze barcoded linear PCR reads.",
+        description="Demultiplex and analyze barcoded linear PCR reads from single or multiple FASTQ files.",
         epilog="""
 Examples:
-  # Basic usage (no adapter detection)
-  python demux_barcodes.py reads.fastq barcodes/251202_primer_well_map_DA.csv
+  # Single file - basic usage (no adapter detection)
+  python demux_barcodes.py raw_data/reads.fastq barcodes/251202_primer_well_map_DA.csv
   
-  # With adapter detection from a Python file defining ADAPTERS
-  python demux_barcodes.py reads.fastq barcodes/251202_primer_well_map_DA.csv \\
+  # Single file - with adapter detection
+  python demux_barcodes.py raw_data/reads.fastq barcodes/251202_primer_well_map_DA.csv \\
       --adapters barcodes/251205_adapters_DA.py
   
-  # With additional options
-  python demux_barcodes.py reads.fastq barcodes/251202_primer_well_map_DA.csv \\
-      --adapters barcodes/251205_adapters_DA.py \\
+  # Single file - with custom output directory
+  python demux_barcodes.py raw_data/reads.fastq barcodes/251202_primer_well_map_DA.csv \\
       --outdir output/ --cpus 4 --flank 100
+  
+  # Multiple files - process all FASTQ files in a directory
+  python demux_barcodes.py raw_data/experiment1/ barcodes/251202_primer_well_map_DA.csv \\
+      --adapters barcodes/251205_adapters_DA.py --cpus 4
+      
+  Note: When processing a directory, output will be in demplex_data/<dirname>/<filename>/
+        When processing a single file, output will be in demplex_data/<filename>/ (unless --outdir is specified)
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("fastq", help="Input FASTQ file")
+    parser.add_argument("fastq", help="Input FASTQ file or directory containing FASTQ files")
     parser.add_argument("barcodes", help="CSV file with barcode-to-well mappings (e.g., barcodes/251202_primer_well_map_DA.csv)")
     parser.add_argument("--adapters", "-a", dest="adapter_file", default=None,
                         help="Python file defining ADAPTERS list (e.g., barcodes/251205_adapters_DA.py). Optional; when omitted, adapter detection is skipped.")
-    parser.add_argument("--outdir", default="demuxed", help="Output directory for matched reads [default: demuxed]")
+    parser.add_argument("--outdir", default="demuxed", help="Output directory for matched reads [default: demuxed or auto-generated based on input]")
     parser.add_argument("--min_length", type=int, default=50, help="Minimum read length [default: 50]")
     parser.add_argument("--max_penalty", type=float, default=60, help="Max allowed mismatch penalty (sum of Phred scores) [default: 60]")
     parser.add_argument("--cpus", type=int, default=1, help="Number of CPU cores to use [default: 1]")

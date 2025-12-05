@@ -200,5 +200,126 @@ class TestProcessChunk(unittest.TestCase):
         self.assertEqual(stats['GLOBAL']['total'], 2, "Should count 2 reads")
 
 
+class TestMultiFileProcessing(unittest.TestCase):
+    """Test processing multiple FASTQ files from a directory."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.input_dir = os.path.join(self.temp_dir, "input_data")
+        os.makedirs(self.input_dir)
+        
+        # Create test barcode CSV
+        self.barcode_csv = os.path.join(self.temp_dir, "test_barcodes.csv")
+        self._create_barcode_csv()
+        
+        # Create multiple test FASTQ files
+        self._create_test_fastq_files()
+
+    def tearDown(self):
+        """Clean up temporary files."""
+        shutil.rmtree(self.temp_dir)
+
+    def _create_barcode_csv(self):
+        """Create a test barcode CSV file."""
+        barcodes = [
+            ("A1", "R oDA373.D501", "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC"),
+            ("A1", "F oDA361.D701", "CAAGCAGAAGACGGCATACGAGATATTACTCGGTCTCGTGGGCTCGG"),
+        ]
+        df = pd.DataFrame(barcodes, columns=["Well Position", "Sequence Name", "Sequence"])
+        df.to_csv(self.barcode_csv, index=False)
+
+    def _create_test_fastq_files(self):
+        """Create multiple test FASTQ files."""
+        for file_num in [1, 2]:
+            fastq_file = os.path.join(self.input_dir, f"test_{file_num}.fastq")
+            records = []
+            row_primer = "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC"
+            col_primer = "CAAGCAGAAGACGGCATACGAGATATTACTCGGTCTCGTGGGCTCGG"
+            insert = "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG" * 5
+            
+            seq_str = row_primer + insert + col_primer
+            rec = SeqRecord(Seq(seq_str), id=f"read_{file_num}")
+            rec.letter_annotations["phred_quality"] = [40] * len(seq_str)
+            records.append(rec)
+            
+            SeqIO.write(records, fastq_file, "fastq")
+
+    def test_directory_processing(self):
+        """Test that directory processing creates correct output structure."""
+        main(
+            self.input_dir,
+            self.barcode_csv,
+            "demuxed",
+            min_length=50,
+            max_penalty=60,
+            cpus=1,
+            flank=100
+        )
+        
+        # Check that output directory was created with correct structure
+        expected_base = os.path.join("demplex_data", "input_data")
+        self.assertTrue(os.path.isdir(expected_base), "Base output directory should exist")
+        
+        # Check that subdirectories for each file were created
+        for file_num in [1, 2]:
+            file_dir = os.path.join(expected_base, f"test_{file_num}")
+            self.assertTrue(os.path.isdir(file_dir), f"Output directory for test_{file_num} should exist")
+            
+            # Check that stats file was created
+            stats_file = os.path.join(file_dir, "barcode_stats.csv")
+            self.assertTrue(os.path.isfile(stats_file), f"Stats file should exist for test_{file_num}")
+        
+        # Cleanup
+        shutil.rmtree("demplex_data")
+
+    def test_single_file_default_output(self):
+        """Test that single file processing uses demplex_data/<filename> structure."""
+        fastq_file = os.path.join(self.input_dir, "test_1.fastq")
+        
+        main(
+            fastq_file,
+            self.barcode_csv,
+            "demuxed",  # Default value
+            min_length=50,
+            max_penalty=60,
+            cpus=1,
+            flank=100
+        )
+        
+        # Check that output directory was created with correct structure
+        expected_dir = os.path.join("demplex_data", "test_1")
+        self.assertTrue(os.path.isdir(expected_dir), "Output directory should exist in demplex_data")
+        
+        # Check that stats file was created
+        stats_file = os.path.join(expected_dir, "barcode_stats.csv")
+        self.assertTrue(os.path.isfile(stats_file), "Stats file should exist")
+        
+        # Cleanup
+        shutil.rmtree("demplex_data")
+
+    def test_single_file_custom_output(self):
+        """Test that single file processing respects custom outdir."""
+        fastq_file = os.path.join(self.input_dir, "test_1.fastq")
+        custom_outdir = os.path.join(self.temp_dir, "custom_output")
+        
+        main(
+            fastq_file,
+            self.barcode_csv,
+            custom_outdir,
+            min_length=50,
+            max_penalty=60,
+            cpus=1,
+            flank=100
+        )
+        
+        # Check that custom output directory was used
+        self.assertTrue(os.path.isdir(custom_outdir), "Custom output directory should exist")
+        
+        # Check that stats file was created
+        stats_file = os.path.join(custom_outdir, "barcode_stats.csv")
+        self.assertTrue(os.path.isfile(stats_file), "Stats file should exist in custom directory")
+
+
 if __name__ == "__main__":
     unittest.main()
