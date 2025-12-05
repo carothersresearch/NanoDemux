@@ -1,5 +1,9 @@
 # NanoDemux
 
+[![Tests](https://github.com/carothersresearch/NanoDemux/actions/workflows/tests.yml/badge.svg)](https://github.com/carothersresearch/NanoDemux/actions/workflows/tests.yml)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 NanoDemux is a Python tool for demultiplexing barcoded reads from pooled Oxford Nanopore sequencing experiments. It identifies and separates reads based on dual-indexed barcodes (row and column primers), enabling efficient analysis of multiplexed samples from 96-well plate formats.
 
 ## Overview
@@ -21,6 +25,86 @@ In pooled nanopore sequencing experiments, multiple samples are combined and seq
 - **Flexible parameters**: Configurable mismatch tolerance, search regions, and minimum read length
 
 ## Installation
+
+### Project Structure
+
+```
+NanoDemux/
+├── demux_barcodes.py          # Main demultiplexing script
+├── benchmark_demux.py         # Benchmarking suite
+├── run_tests.py               # Test runner
+├── Makefile                   # Build automation and test targets
+├── requirements.txt           # Python dependencies
+├── primer_well_map.csv        # Example barcode definitions
+├── raw_data/                  # Input FASTQ files (add your data here)
+│   ├── 55XPXK_1_P4_323_EG.fastq
+│   └── VL69M6_1_P4_323_full.fastq
+├── benchmarking_data/         # Benchmarking suite data (self-contained)
+│   ├── firstpass/             # Sample datasets for benchmarking
+│   ├── BENCHMARKING.md        # Benchmarking documentation
+│   ├── benchmark_results.json # Historical benchmark results
+│   └── */                     # Run-specific outputs (stats only)
+├── demplex_data/              # Demultiplexed output examples
+│   ├── 55XPXK/
+│   └── VL96M6/
+├── tests/                     # Comprehensive testing suite
+│   ├── test_*.py              # 27 test cases
+│   └── *.md                   # Testing documentation
+├── .github/workflows/         # CI/CD pipeline
+└── DOCKER.md                  # Docker instructions
+```
+
+### Testing
+
+This project includes a comprehensive testing suite with 27 test cases covering all functionality:
+
+```bash
+# Run all tests (requires pytest)
+make test
+
+# Run tests with coverage report
+make test-cov
+
+# Show all available test commands
+make help
+```
+
+See `tests/TESTING_QUICK_REFERENCE.md` for complete testing documentation.
+
+### Benchmarking
+
+Track demultiplexing performance over time as you optimize the algorithm:
+
+```bash
+# Quick benchmark (100 reads, ~5 seconds)
+make benchmark-fast
+
+# Standard benchmark (1000 reads, ~20 seconds)
+make benchmark
+
+# Full dataset benchmark (all reads, several minutes)
+make benchmark-full
+
+# Compare recent benchmark results
+make benchmark-compare
+
+# View detailed metrics
+cat benchmarking_data/benchmarks/benchmark_report.md
+```
+
+**Key Features:**
+- 🚀 Fast benchmarking with subset sampling
+- 📊 Automatic FASTQ cleanup (keeps only stats CSV)
+- 📁 Self-contained in `benchmarking_data/` directory
+- 🤖 **Automated CI/CD benchmarking** on every push to main
+- 🧭 Flexible inputs: pass `--barcodes` to choose a barcode map and optional `--adapters` to test adapter sets
+
+**CI/CD Integration:** Benchmarks run automatically on every push to the main branch. Results are:
+- Posted as commit comments
+- Uploaded as GitHub Actions artifacts (90-day retention)
+- Compared against previous runs to track performance
+
+See `benchmarking_data/BENCHMARKING.md` for complete documentation.
 
 ### Option 1: Docker (Recommended)
 
@@ -63,7 +147,15 @@ python demux_barcodes.py <input.fastq> <barcodes.csv> --outdir <output_directory
 ### Example
 
 ```bash
-python demux_barcodes.py VL69M6_1_P4_323_full.fastq primer_well_map.csv --outdir VL96M6 --cpus 4
+# Using example barcodes and optional adapters
+python demux_barcodes.py raw_data/55XPXK_1_P4_323_EG.fastq \
+    barcodes/251202_primer_well_map_DA.csv \
+    --adapters barcodes/251205_adapters_DA.py \
+    --outdir output/55XPXK --cpus 4 --flank 100
+
+# Using your own data (no adapter detection)
+python demux_barcodes.py raw_data/your_data.fastq barcodes/your_barcode_map.csv \
+    --outdir demplex_data/your_output --cpus 4
 ```
 
 ### Command-line Options
@@ -76,7 +168,7 @@ python demux_barcodes.py VL69M6_1_P4_323_full.fastq primer_well_map.csv --outdir
 | `--min_length` | `50` | Minimum read length to process (shorter reads are filtered) |
 | `--max_penalty` | `60` | Maximum quality-weighted mismatch penalty (higher = more tolerant) |
 | `--cpus` | `1` | Number of CPU cores for parallel processing |
-| `--flank` | `50` | Number of bases at each read end to search for barcodes |
+| `--flank` | `100` | Number of bases at each read end to search for barcodes |
 
 ## Input Files
 
@@ -107,6 +199,15 @@ A1,F oDA361.D701,CAAGCAGAAGACGGCATACGAGATATTACTCGGTCTCGTGGGCTCGG
 A2,R oDA373.D501,AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC
 A2,F oDA362.D702,CAAGCAGAAGACGGCATACGAGATTCCGGAGAGTCTCGTGGGCTCGG
 ```
+
+💡 **Multiple maps**: Place different barcode maps under `barcodes/` (e.g., `barcodes/<date>_primer_well_map_*.csv`) and pass the desired file on the command line.
+
+### 3. Adapter File (optional)
+
+If you want to detect adapter-only reads, provide a Python file that defines an `ADAPTERS = [...]` list (one adapter sequence per entry). Example: `barcodes/251205_adapters_DA.py`.
+
+- Omit `--adapters` to skip adapter detection.
+- Provide any adapter file on the command line to change behavior—no defaults are assumed.
 
 ## Output Files
 

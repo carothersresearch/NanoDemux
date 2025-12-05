@@ -8,10 +8,7 @@ from collections import defaultdict
 import os
 from multiprocessing import Pool
 
-ADAPTERS = [
-    "TCGTCGGCAGCGTCAGATGTGTATAAGAGACAGgcgcccggggagc".upper(),           # oDA381
-    "GTCTCGTGGGCTCGGAGATGTGTATAAGAGACAGgtgccccaactggggtaacc".upper()    # oDA382
-]
+
 
 # ---------------------------------
 # Helpers
@@ -57,6 +54,32 @@ def match_barcode_ends_weighted(seq, qual, barcode, max_penalty=60, flank=20):
     return False
 
 # ---------------------------------
+# Load adapters from Python file
+# ---------------------------------
+
+def load_adapters(adapter_file):
+    """
+    Load adapter sequences from a Python file that defines ADAPTERS list.
+    
+    Parameters:
+        adapter_file (str): Path to Python file containing ADAPTERS = [...]
+    
+    Returns:
+        list: List of adapter sequences (uppercase)
+    """
+    if not adapter_file:
+        return []
+    
+    print(f"Loading adapters from {adapter_file}...")
+    adapters_module = {}
+    with open(adapter_file, 'r') as f:
+        exec(f.read(), adapters_module)
+    
+    adapters = adapters_module.get('ADAPTERS', [])
+    print(f"Loaded {len(adapters)} adapter sequences.")
+    return adapters
+
+# ---------------------------------
 # Load barcodes from CSV
 # ---------------------------------
 
@@ -84,7 +107,7 @@ def load_barcodes(csv_file):
 # ---------------------------------
 
 def process_chunk(args):
-    chunk, row_map, col_map, min_length, max_penalty, flank = args
+    chunk, row_map, col_map, min_length, max_penalty, flank, adapters = args
     stats = defaultdict(int_defaultdict)
     grouped_reads = defaultdict(list)
 
@@ -139,14 +162,17 @@ def process_chunk(args):
             stats['GLOBAL']['single'] += 1
 
         else:
-            # Look for adapters
-            adapter_found = any(
-                match_barcode_ends_weighted(seq, qual, adapter, max_penalty, flank) or
-                match_barcode_ends_weighted(rc_seq, rc_qual, adapter, max_penalty, flank)
-                for adapter in ADAPTERS
-            )
-            if adapter_found:
-                stats['GLOBAL']['adapters_only'] += 1
+            # Look for adapters (if provided)
+            if adapters:
+                adapter_found = any(
+                    match_barcode_ends_weighted(seq, qual, adapter, max_penalty, flank) or
+                    match_barcode_ends_weighted(rc_seq, rc_qual, adapter, max_penalty, flank)
+                    for adapter in adapters
+                )
+                if adapter_found:
+                    stats['GLOBAL']['adapters_only'] += 1
+                else:
+                    stats['GLOBAL']['no_match'] += 1
             else:
                 stats['GLOBAL']['no_match'] += 1
 
@@ -233,11 +259,12 @@ def write_barcode_grid_csv(stats, outpath):
 # Main
 # ---------------------------------
 
-def main(fastq_file, barcode_csv, outdir, min_length, max_penalty, cpus, flank):
+def main(fastq_file, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None):
     os.makedirs(outdir, exist_ok=True)
     row_map, col_map = load_barcodes(barcode_csv)
+    adapters = load_adapters(adapter_file) if adapter_file else []
     pool = Pool(processes=cpus)
-    jobs = [(chunk, row_map, col_map, min_length, max_penalty, flank)
+    jobs = [(chunk, row_map, col_map, min_length, max_penalty, flank, adapters)
             for chunk in chunk_reads(fastq_file)]
     results = pool.map(process_chunk, jobs)
     pool.close()
@@ -256,14 +283,33 @@ def main(fastq_file, barcode_csv, outdir, min_length, max_penalty, cpus, flank):
     print("✅ Done.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Demultiplex and analyze barcoded linear PCR reads.")
+    parser = argparse.ArgumentParser(
+        description="Demultiplex and analyze barcoded linear PCR reads.",
+        epilog="""
+Examples:
+  # Basic usage (no adapter detection)
+  python demux_barcodes.py reads.fastq barcodes/251202_primer_well_map_DA.csv
+  
+  # With adapter detection from a Python file defining ADAPTERS
+  python demux_barcodes.py reads.fastq barcodes/251202_primer_well_map_DA.csv \\
+      --adapters barcodes/251205_adapters_DA.py
+  
+  # With additional options
+  python demux_barcodes.py reads.fastq barcodes/251202_primer_well_map_DA.csv \\
+      --adapters barcodes/251205_adapters_DA.py \\
+      --outdir output/ --cpus 4 --flank 100
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("fastq", help="Input FASTQ file")
-    parser.add_argument("barcodes", help="CSV file with barcode definitions")
-    parser.add_argument("--outdir", default="demuxed", help="Output directory for matched reads")
+    parser.add_argument("barcodes", help="CSV file with barcode-to-well mappings (e.g., barcodes/251202_primer_well_map_DA.csv)")
+    parser.add_argument("--adapters", "-a", dest="adapter_file", default=None,
+                        help="Python file defining ADAPTERS list (e.g., barcodes/251205_adapters_DA.py). Optional; when omitted, adapter detection is skipped.")
+    parser.add_argument("--outdir", default="demuxed", help="Output directory for matched reads [default: demuxed]")
     parser.add_argument("--min_length", type=int, default=50, help="Minimum read length [default: 50]")
     parser.add_argument("--max_penalty", type=float, default=60, help="Max allowed mismatch penalty (sum of Phred scores) [default: 60]")
     parser.add_argument("--cpus", type=int, default=1, help="Number of CPU cores to use [default: 1]")
-    parser.add_argument("--flank", type=int, default=50, help="Number of bases at each end to search for barcodes [default: 50]")
+    parser.add_argument("--flank", type=int, default=100, help="Number of bases at each end to search for barcodes [default: 100]")
     args = parser.parse_args()
 
-    main(args.fastq, args.barcodes, args.outdir, args.min_length, args.max_penalty, args.cpus, args.flank)
+    main(args.fastq, args.barcodes, args.outdir, args.min_length, args.max_penalty, args.cpus, args.flank, args.adapter_file)

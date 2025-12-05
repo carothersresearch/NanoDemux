@@ -5,6 +5,18 @@ test_output/
 *_reads.fastq
 barcode_stats.csv
 
+# Benchmarking
+benchmarks/
+!benchmarks/.gitkeep
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
 # Python
 __pycache__/
 *.py[cod]
