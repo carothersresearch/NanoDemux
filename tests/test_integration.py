@@ -180,7 +180,7 @@ class TestProcessChunk(unittest.TestCase):
         rec.letter_annotations["phred_quality"] = [40] * 200
         records = [rec]
         
-        args = (records, self.row_map, self.col_map, 50, 60, 100)
+        args = (records, self.row_map, self.col_map, 50, 60, 100, [])
         stats, reads = process_chunk(args)
         
         self.assertIsInstance(stats, dict, "Stats should be a dict")
@@ -194,7 +194,7 @@ class TestProcessChunk(unittest.TestCase):
             rec.letter_annotations["phred_quality"] = [40] * 200
             records.append(rec)
         
-        args = (records, self.row_map, self.col_map, 50, 60, 100)
+        args = (records, self.row_map, self.col_map, 50, 60, 100, [])
         stats, reads = process_chunk(args)
         
         self.assertEqual(stats['GLOBAL']['total'], 2, "Should count 2 reads")
