@@ -30,25 +30,37 @@ In pooled nanopore sequencing experiments, multiple samples are combined and seq
 
 ```
 NanoDemux/
-├── demux_barcodes.py          # Main demultiplexing script
+├── demux_barcodes.py          # Main demultiplexing script (supports single or multi-file)
 ├── benchmark_demux.py         # Benchmarking suite
 ├── run_tests.py               # Test runner
 ├── Makefile                   # Build automation and test targets
 ├── requirements.txt           # Python dependencies
 ├── primer_well_map.csv        # Example barcode definitions
-├── raw_data/                  # Input FASTQ files (add your data here)
-│   ├── 55XPXK_1_P4_323_EG.fastq
-│   └── VL69M6_1_P4_323_full.fastq
+├── raw_data/                  # Input FASTQ files (organize in subfolders)
+│   ├── 55XPXK_1_P4_323_EG.fastq          # Single file example
+│   ├── VL69M6_1_P4_323_full.fastq        # Single file example
+│   └── experiment1/                       # Directory example (batch processing)
+│       ├── sample1.fastq
+│       └── sample2.fastq
 ├── benchmarking_data/         # Benchmarking suite data (self-contained)
 │   ├── firstpass/             # Sample datasets for benchmarking
 │   ├── BENCHMARKING.md        # Benchmarking documentation
 │   ├── benchmark_results.json # Historical benchmark results
 │   └── */                     # Run-specific outputs (stats only)
-├── demplex_data/              # Demultiplexed output examples
-│   ├── 55XPXK/
-│   └── VL96M6/
+├── demplex_data/              # Demultiplexed output (auto-generated)
+│   ├── 55XPXK_1_P4_323_EG/    # Single file output
+│   │   ├── A1_reads.fastq
+│   │   ├── A2_reads.fastq
+│   │   └── barcode_stats.csv
+│   └── experiment1/           # Multi-file output (batch)
+│       ├── sample1/
+│       │   ├── A1_reads.fastq
+│       │   └── barcode_stats.csv
+│       └── sample2/
+│           ├── A1_reads.fastq
+│           └── barcode_stats.csv
 ├── tests/                     # Comprehensive testing suite
-│   ├── test_*.py              # 27 test cases
+│   ├── test_*.py              # 30 test cases
 │   └── *.md                   # Testing documentation
 ├── .github/workflows/         # CI/CD pipeline
 └── DOCKER.md                  # Docker instructions
@@ -138,50 +150,95 @@ pip install biopython pandas
 
 ## Usage
 
-### Basic Command
+### Basic Commands
 
+**Single File Processing:**
 ```bash
-python demux_barcodes.py <input.fastq> <barcodes.csv> --outdir <output_directory>
+python demux_barcodes.py <input.fastq> <barcodes.csv>
 ```
 
-### Example
+**Multiple File Processing (Directory):**
+```bash
+python demux_barcodes.py <input_directory> <barcodes.csv>
+```
+
+### Examples
 
 ```bash
-# Using example barcodes and optional adapters
+# Single file - using example barcodes and optional adapters
 python demux_barcodes.py raw_data/55XPXK_1_P4_323_EG.fastq \
     barcodes/251202_primer_well_map_DA.csv \
     --adapters barcodes/251205_adapters_DA.py \
-    --outdir output/55XPXK --cpus 4 --flank 100
+    --cpus 4 --flank 100
 
-# Using your own data (no adapter detection)
+# Single file - with custom output directory
 python demux_barcodes.py raw_data/your_data.fastq barcodes/your_barcode_map.csv \
-    --outdir demplex_data/your_output --cpus 4
+    --outdir custom_output/ --cpus 4
+
+# Process all FASTQ files in a directory
+python demux_barcodes.py raw_data/experiment1/ barcodes/251202_primer_well_map_DA.csv \
+    --adapters barcodes/251205_adapters_DA.py --cpus 4
+```
+
+### Output Directory Structure
+
+The tool automatically creates an organized output structure:
+
+- **Single file (default)**: `demplex_data/<filename>/` - Each file gets its own directory
+- **Single file (custom)**: Use `--outdir` to specify exact output location
+- **Multiple files**: `demplex_data/<directory_name>/<filename>/` - Directory structure is preserved
+
+Example:
+```
+# Input: raw_data/experiment1/sample1.fastq
+# Output: demplex_data/experiment1/sample1/*.fastq + barcode_stats.csv
+
+# Input: raw_data/experiment1/ (containing sample1.fastq, sample2.fastq)
+# Output: demplex_data/experiment1/sample1/*.fastq + barcode_stats.csv
+#         demplex_data/experiment1/sample2/*.fastq + barcode_stats.csv
 ```
 
 ### Command-line Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `fastq` | (required) | Input FASTQ file with pooled reads |
+| `fastq` | (required) | Input FASTQ file or directory containing FASTQ files |
 | `barcodes` | (required) | CSV file defining barcode-to-well mappings |
-| `--outdir` | `demuxed` | Output directory for demultiplexed FASTQ files |
+| `--outdir` | `demuxed` | Output directory (auto-generated for default, see above) |
 | `--min_length` | `50` | Minimum read length to process (shorter reads are filtered) |
 | `--max_penalty` | `60` | Maximum quality-weighted mismatch penalty (higher = more tolerant) |
 | `--cpus` | `1` | Number of CPU cores for parallel processing |
 | `--flank` | `100` | Number of bases at each read end to search for barcodes |
+| `--adapters` | `None` | Optional Python file defining ADAPTERS list for adapter detection |
 
 ## Input Files
 
-### 1. FASTQ File
+### 1. FASTQ File or Directory
 
-Standard FASTQ format with nanopore sequencing reads. The tool expects reads to contain adapter sequences with embedded barcodes at either end.
+You can provide either:
+- **Single FASTQ file**: A standard FASTQ format file with nanopore sequencing reads
+- **Directory containing FASTQ files**: The tool will automatically find and process all files with extensions `.fastq`, `.fq`, `.fastq.gz`, or `.fq.gz`
 
-Example:
+The tool expects reads to contain adapter sequences with embedded barcodes at either end.
+
+Example FASTQ format:
 ```
 @read_id
 AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC...
 +
 IHHIKLIKHIGHGOKOLJGFFHLNLQPLHIJKJLLEFGFDEEEFHJKMBC...
+```
+
+Recommended directory structure:
+```
+raw_data/
+├── experiment1/
+│   ├── sample1.fastq
+│   ├── sample2.fastq
+│   └── sample3.fastq
+└── experiment2/
+    ├── sampleA.fastq
+    └── sampleB.fastq
 ```
 
 ### 2. Barcode CSV File
@@ -252,22 +309,50 @@ The quality-weighted mismatch scoring allows the tool to distinguish between lik
 
 This approach is more robust than simple edit distance for noisy nanopore data.
 
-## Example Workflow
+## Example Workflows
+
+### Single File Processing
 
 ```bash
 # 1. Prepare your barcode mapping file (primer_well_map.csv)
-# 2. Run demultiplexing with 4 CPU cores
-python demux_barcodes.py my_reads.fastq primer_well_map.csv \
-    --outdir demuxed_output \
+# 2. Run demultiplexing on a single FASTQ file with 4 CPU cores
+python demux_barcodes.py raw_data/my_reads.fastq barcodes/primer_well_map.csv \
     --cpus 4 \
     --max_penalty 60 \
     --min_length 50
 
-# 3. Check statistics
-cat demuxed_output/barcode_stats.csv
+# 3. Check statistics (output will be in demplex_data/my_reads/)
+cat demplex_data/my_reads/barcode_stats.csv
 
 # 4. Process individual well FASTQ files
-# e.g., downstream analysis on demuxed_output/A1_reads.fastq
+# e.g., downstream analysis on demplex_data/my_reads/A1_reads.fastq
+```
+
+### Multiple File Processing (Batch Mode)
+
+```bash
+# 1. Organize your FASTQ files in a subdirectory
+mkdir -p raw_data/experiment1
+mv *.fastq raw_data/experiment1/
+
+# 2. Run demultiplexing on all files in the directory
+python demux_barcodes.py raw_data/experiment1/ barcodes/primer_well_map.csv \
+    --cpus 4 \
+    --max_penalty 60
+
+# 3. Output will be organized in demplex_data/experiment1/
+#    - demplex_data/experiment1/sample1/barcode_stats.csv
+#    - demplex_data/experiment1/sample1/A1_reads.fastq
+#    - demplex_data/experiment1/sample2/barcode_stats.csv
+#    - demplex_data/experiment1/sample2/A1_reads.fastq
+#    etc.
+
+# 4. Check statistics for each file
+for dir in demplex_data/experiment1/*/; do
+    echo "Statistics for $(basename $dir):"
+    cat "$dir/barcode_stats.csv"
+    echo ""
+done
 ```
 
 ## Understanding the Statistics
