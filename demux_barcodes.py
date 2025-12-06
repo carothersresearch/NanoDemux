@@ -16,6 +16,8 @@ import os
 from multiprocessing import Pool
 import glob
 import itertools
+import parasail
+import numpy as np
 
 # ---------------------------------
 # Helpers
@@ -109,7 +111,172 @@ def analyze_barcode_set(sequences):
     }
 
 # ---------------------------------
-# Improved matching function
+# Fast candidate filter (Method 1)
+# ---------------------------------
+
+def find_barcode_candidates(seq, qual, barcode_map, group_seqs, const_idx, var_idx,
+                            max_penalty=60, flank=100, var_q=10):
+    """
+    Fast candidate filter: find all barcodes that pass the quality-weighted constant check
+    and variable disambiguation.
+    
+    Parameters:
+        seq, qual: sequence string and list of Phred ints
+        barcode_map: dict mapping barcode sequences to identifiers (e.g., row letters or col numbers)
+        group_seqs: list of all barcode sequences in the group
+        const_idx, var_idx: constant and variable position indices
+        max_penalty: allowed sum of Phred scores of mismatches at constant positions
+        flank: bases from each end to search
+        var_q: Phred cutoff for confident variable-base match
+    
+    Returns:
+        list of identifiers for barcodes that match (empty if none match)
+    """
+    candidates = []
+    for barcode_seq, identifier in barcode_map.items():
+        if match_barcode_ends_weighted(seq, qual, barcode_seq, group_seqs,
+                                      const_idx, var_idx, max_penalty, flank, var_q):
+            candidates.append(identifier)
+    return candidates
+
+# ---------------------------------
+# Fallback alignment (Method 2)
+# ---------------------------------
+
+def alignment_score_and_llr(seq, barcode_seq, qual, flank=100):
+    """
+    Compute local alignment score using parasail and calculate a log-likelihood ratio.
+    
+    Parameters:
+        seq: read sequence (string)
+        barcode_seq: barcode sequence (string)
+        qual: quality scores (list of Phred ints)
+        flank: bases from each end to search
+    
+    Returns:
+        tuple: (alignment_score, llr) or (None, None) if no alignment found
+    """
+    # Extract both ends for alignment
+    k = len(barcode_seq)
+    ends = [seq[:flank], seq[-flank:]]
+    
+    best_score = -float('inf')
+    best_llr = -float('inf')
+    
+    # Use Smith-Waterman local alignment
+    # Match=2, Mismatch=-1, Gap open=2, Gap extend=1 (typical nanopore-friendly scoring)
+    matrix = parasail.matrix_create("ACGT", 2, -1)
+    
+    for end_seq in ends:
+        if len(end_seq) < k:
+            continue
+        
+        # Perform Smith-Waterman alignment
+        result = parasail.sw_trace_scan_16(barcode_seq, end_seq, 2, 1, matrix)
+        
+        if result.score > best_score:
+            best_score = result.score
+            
+            # Calculate LLR based on alignment quality
+            # LLR = log(P(alignment|correct) / P(alignment|incorrect))
+            # Simplified: use alignment score normalized by barcode length
+            # and penalized by expected random match
+            expected_random_score = k * 0.25 * 2  # 0.25 prob * match score * length
+            best_llr = (result.score - expected_random_score) / k
+    
+    return (best_score, best_llr) if best_score > 0 else (None, None)
+
+def find_barcodes_with_alignment(seq, qual, barcode_map, min_score=20, min_llr=0.5, flank=100):
+    """
+    Find barcodes using alignment-based approach for ambiguous cases.
+    
+    Parameters:
+        seq, qual: sequence and quality scores
+        barcode_map: dict mapping barcode sequences to identifiers
+        min_score: minimum alignment score to accept
+        min_llr: minimum log-likelihood ratio to accept
+        flank: bases from each end to search
+    
+    Returns:
+        list of tuples: [(identifier, score, llr), ...] sorted by score descending
+    """
+    results = []
+    for barcode_seq, identifier in barcode_map.items():
+        score, llr = alignment_score_and_llr(seq, barcode_seq, qual, flank)
+        if score is not None and score >= min_score and llr >= min_llr:
+            results.append((identifier, score, llr))
+    
+    # Sort by score (descending), then by llr (descending)
+    results.sort(key=lambda x: (x[1], x[2]), reverse=True)
+    return results
+
+# ---------------------------------
+# Two-tiered matching wrapper
+# ---------------------------------
+
+def find_barcodes_two_tier(seq, qual, barcode_map, group_seqs, const_idx, var_idx,
+                          max_penalty=60, flank=100, var_q=10,
+                          min_alignment_score=20, min_llr=0.5,
+                          use_fallback=True):
+    """
+    Two-tiered barcode matching:
+    1. Try fast candidate filter first
+    2. If ambiguous (0 matches or >1 matches), optionally use alignment fallback
+    
+    Parameters:
+        seq, qual: sequence and quality scores
+        barcode_map: dict mapping barcode sequences to identifiers
+        group_seqs: list of all barcode sequences in the group
+        const_idx, var_idx: constant and variable position indices
+        max_penalty: allowed sum of Phred scores of mismatches at constant positions
+        flank: bases from each end to search
+        var_q: Phred cutoff for confident variable-base match
+        min_alignment_score: minimum alignment score for fallback
+        min_llr: minimum log-likelihood ratio for fallback
+        use_fallback: whether to use alignment fallback for ambiguous cases
+    
+    Returns:
+        tuple: (list of identifiers, method_used)
+               method_used: 'fast' or 'alignment' or 'none'
+    """
+    # Method 1: Fast candidate filter
+    candidates = find_barcode_candidates(seq, qual, barcode_map, group_seqs,
+                                        const_idx, var_idx, max_penalty, flank, var_q)
+    
+    # If unique match found, return immediately (fast path)
+    if len(candidates) == 1:
+        return candidates, 'fast'
+    
+    # If no ambiguity and fast filter worked, return
+    if len(candidates) == 0 and not use_fallback:
+        return [], 'fast'
+    
+    # Method 2: Fallback alignment for ambiguous cases (0 or >1 candidates)
+    if use_fallback and (len(candidates) == 0 or len(candidates) > 1):
+        alignment_results = find_barcodes_with_alignment(
+            seq, qual, barcode_map, min_alignment_score, min_llr, flank
+        )
+        
+        if len(alignment_results) > 0:
+            # Take best alignment (first in sorted list)
+            best_match = alignment_results[0]
+            # Only return if significantly better than second-best
+            if len(alignment_results) == 1:
+                return [best_match[0]], 'alignment'
+            else:
+                # Check if best is significantly better than second
+                score_diff = best_match[1] - alignment_results[1][1]
+                if score_diff > 5:  # Require >5 point score difference for uniqueness
+                    return [best_match[0]], 'alignment'
+        
+        # Alignment didn't help disambiguate
+        return [], 'alignment'
+    
+    # Multiple candidates from fast filter, no fallback
+    return candidates, 'fast'
+
+# ---------------------------------
+# Improved matching function (kept for backwards compatibility)
 # ---------------------------------
 
 def match_barcode_ends_weighted(seq, qual, barcode_seq,
@@ -256,9 +423,9 @@ def load_barcodes(csv_file):
 def process_chunk(args):
     """
     args is a tuple:
-      (chunk, row_map, col_map, row_meta, col_meta, min_length, max_penalty, flank, adapters, var_q)
+      (chunk, row_map, col_map, row_meta, col_meta, min_length, max_penalty, flank, adapters, var_q, use_fallback)
     """
-    chunk, row_map, col_map, row_meta, col_meta, min_length, max_penalty, flank, adapters, var_q = args
+    chunk, row_map, col_map, row_meta, col_meta, min_length, max_penalty, flank, adapters, var_q, use_fallback = args
     stats = defaultdict(int_defaultdict)
     grouped_reads = defaultdict(list)
 
@@ -282,28 +449,51 @@ def process_chunk(args):
 
         stats['GLOBAL']['length_ok'] += 1
 
-        # Find row primers (using improved matching with const/var analysis)
-        found_rows = [row_map[idx] for idx in row_map
-                      if match_barcode_ends_weighted(seq, qual, idx,
-                                                     row_group,
-                                                     row_meta['const_idx'], row_meta['var_idx'],
-                                                     max_penalty, flank, var_q)
-                      or match_barcode_ends_weighted(rc_seq, rc_qual, idx,
-                                                     row_group,
-                                                     row_meta['const_idx'], row_meta['var_idx'],
-                                                     max_penalty, flank, var_q)]
+        # Two-tiered matching: try forward and reverse complement for both row and column
+        # Find row primers using two-tiered approach
+        found_rows_fwd, method_row_fwd = find_barcodes_two_tier(
+            seq, qual, row_map, row_group,
+            row_meta['const_idx'], row_meta['var_idx'],
+            max_penalty, flank, var_q, use_fallback=use_fallback
+        )
+        found_rows_rc, method_row_rc = find_barcodes_two_tier(
+            rc_seq, rc_qual, row_map, row_group,
+            row_meta['const_idx'], row_meta['var_idx'],
+            max_penalty, flank, var_q, use_fallback=use_fallback
+        )
+        
+        # Combine forward and reverse complement results
+        found_rows = list(set(found_rows_fwd + found_rows_rc))
+        row_method = method_row_fwd if found_rows_fwd else method_row_rc
 
-        # Find column primers
-        found_cols = [col_map[idx] for idx in col_map
-                      if match_barcode_ends_weighted(seq, qual, idx,
-                                                     col_group,
-                                                     col_meta['const_idx'], col_meta['var_idx'],
-                                                     max_penalty, flank, var_q)
-                      or match_barcode_ends_weighted(rc_seq, rc_qual, idx,
-                                                     col_group,
-                                                     col_meta['const_idx'], col_meta['var_idx'],
-                                                     max_penalty, flank, var_q)]
+        # Find column primers using two-tiered approach
+        found_cols_fwd, method_col_fwd = find_barcodes_two_tier(
+            seq, qual, col_map, col_group,
+            col_meta['const_idx'], col_meta['var_idx'],
+            max_penalty, flank, var_q, use_fallback=use_fallback
+        )
+        found_cols_rc, method_col_rc = find_barcodes_two_tier(
+            rc_seq, rc_qual, col_map, col_group,
+            col_meta['const_idx'], col_meta['var_idx'],
+            max_penalty, flank, var_q, use_fallback=use_fallback
+        )
+        
+        # Combine forward and reverse complement results
+        found_cols = list(set(found_cols_fwd + found_cols_rc))
+        col_method = method_col_fwd if found_cols_fwd else method_col_rc
 
+        # Track which method was used for successful mappings
+        if row_method == 'alignment':
+            stats['method']['row_alignment'] += 1
+        elif row_method == 'fast' and len(found_rows) > 0:
+            stats['method']['row_fast'] += 1
+            
+        if col_method == 'alignment':
+            stats['method']['col_alignment'] += 1
+        elif col_method == 'fast' and len(found_cols) > 0:
+            stats['method']['col_fast'] += 1
+
+        # Assignment logic
         if len(found_rows) == 1 and len(found_cols) == 1:
             well = f"{found_rows[0]}{found_cols[0]}"
             stats[well]['both'] += 1
@@ -421,8 +611,8 @@ def write_barcode_grid_csv(stats, outpath):
 # Process a single FASTQ file
 # ---------------------------------
 
-def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None, var_q=10):
-    """Process a single FASTQ file with improved barcode matching."""
+def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None, var_q=10, use_fallback=True):
+    """Process a single FASTQ file with improved two-tiered barcode matching."""
     os.makedirs(outdir, exist_ok=True)
     row_map, col_map = load_barcodes(barcode_csv)
     
@@ -435,7 +625,7 @@ def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty
     
     adapters = load_adapters(adapter_file) if adapter_file else []
     pool = Pool(processes=cpus)
-    jobs = [(chunk, row_map, col_map, row_meta, col_meta, min_length, max_penalty, flank, adapters, var_q)
+    jobs = [(chunk, row_map, col_map, row_meta, col_meta, min_length, max_penalty, flank, adapters, var_q, use_fallback)
             for chunk in chunk_reads(fastq_file)]
     results = pool.map(process_chunk, jobs)
     pool.close()
@@ -451,15 +641,25 @@ def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty
 
     # Save stats grid
     write_barcode_grid_csv(all_stats, os.path.join(outdir, "barcode_stats.csv"))
+    
+    # Print method usage statistics
+    method_stats = all_stats.get('method', {})
+    if method_stats:
+        print(f"\n📊 Method Usage Statistics:")
+        print(f"  Fast filter (rows): {method_stats.get('row_fast', 0)}")
+        print(f"  Alignment fallback (rows): {method_stats.get('row_alignment', 0)}")
+        print(f"  Fast filter (cols): {method_stats.get('col_fast', 0)}")
+        print(f"  Alignment fallback (cols): {method_stats.get('col_alignment', 0)}")
+    
     print(f"✅ Processed {fastq_file}")
 
 # ---------------------------------
 # Main function - handles both files and directories
 # ---------------------------------
 
-def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None, var_q=10):
+def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None, var_q=10, use_fallback=True):
     """
-    Main entry point that handles both single files and directories with improved barcode matching.
+    Main entry point that handles both single files and directories with improved two-tiered barcode matching.
     
     Parameters:
         fastq_input: Path to either a FASTQ file or a directory containing FASTQ files
@@ -471,6 +671,7 @@ def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank,
         flank: Number of bases at each end to search
         adapter_file: Optional adapter file
         var_q: Phred cutoff to call a variable-base match 'confident' (default: 10)
+        use_fallback: Use alignment fallback for ambiguous cases (default: True)
     """
     # Check if input is a file or directory
     if os.path.isfile(fastq_input):
@@ -480,7 +681,7 @@ def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank,
             basename = get_basename_without_extensions(fastq_input)
             outdir = os.path.join("demplex_data", basename)
         print(f"Processing single file: {fastq_input}")
-        process_single_file(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file, var_q)
+        process_single_file(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file, var_q, use_fallback)
     elif os.path.isdir(fastq_input):
         # Directory mode - process all FASTQ files
         print(f"Processing directory: {fastq_input}")
@@ -503,7 +704,7 @@ def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank,
             file_basename = get_basename_without_extensions(fastq_file)
             file_outdir = os.path.join(base_outdir, file_basename)
             print(f"\n📂 Processing: {os.path.basename(fastq_file)}")
-            process_single_file(fastq_file, barcode_csv, file_outdir, min_length, max_penalty, cpus, flank, adapter_file, var_q)
+            process_single_file(fastq_file, barcode_csv, file_outdir, min_length, max_penalty, cpus, flank, adapter_file, var_q, use_fallback)
         
         print(f"\n✅ All files processed. Output in: {base_outdir}")
     else:
@@ -545,6 +746,8 @@ Examples:
     parser.add_argument("--flank", type=int, default=100, help="Number of bases at each end to search for barcodes [default: 100]")
     parser.add_argument("--var_q", type=int, default=10,
                         help="Phred cutoff to call a variable-base match 'confident' [default: 10]")
+    parser.add_argument("--no-fallback", dest="use_fallback", action="store_false", default=True,
+                        help="Disable alignment fallback for ambiguous cases (use only fast filter) [default: enabled]")
     args = parser.parse_args()
 
-    main(args.fastq, args.barcodes, args.outdir, args.min_length, args.max_penalty, args.cpus, args.flank, args.adapter_file, args.var_q)
+    main(args.fastq, args.barcodes, args.outdir, args.min_length, args.max_penalty, args.cpus, args.flank, args.adapter_file, args.var_q, args.use_fallback)
