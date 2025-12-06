@@ -21,7 +21,8 @@ from demux_barcodes import (
     load_barcodes,
     int_defaultdict,
     merge_dicts,
-    merge_reads
+    merge_reads,
+    get_basename_without_extensions
 )
 
 
@@ -43,6 +44,16 @@ class TestHelperFunctions(unittest.TestCase):
         d = int_defaultdict()
         self.assertIsInstance(d, defaultdict)
         self.assertEqual(d['nonexistent'], 0)
+
+    def test_get_basename_without_extensions(self):
+        """Test removal of FASTQ extensions including double extensions."""
+        self.assertEqual(get_basename_without_extensions("sample.fastq"), "sample")
+        self.assertEqual(get_basename_without_extensions("sample.fq"), "sample")
+        self.assertEqual(get_basename_without_extensions("sample.fastq.gz"), "sample")
+        self.assertEqual(get_basename_without_extensions("sample.fq.gz"), "sample")
+        self.assertEqual(get_basename_without_extensions("/path/to/sample.fastq.gz"), "sample")
+        # Test with unknown extension
+        self.assertEqual(get_basename_without_extensions("sample.txt"), "sample")
 
 
 class TestBarcodeMatching(unittest.TestCase):
