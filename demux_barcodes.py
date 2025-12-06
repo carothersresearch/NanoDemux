@@ -357,14 +357,19 @@ def match_barcode_ends_weighted(seq, qual, barcode_seq,
             best_other_conf = max(other_csups) if other_csups else -1
 
             # uniqueness tests:
-            # - either variable support strictly greater than best other
-            # - or confident support strictly greater than best other confident support
-            unique_by_var = (target_sup > best_other)
-            unique_by_conf = (target_csup > best_other_conf)
+            # If there are no variable positions, accept if constant positions match
+            if not var_idx:
+                if penalty_const <= max_penalty:
+                    return True
+            else:
+                # - either variable support strictly greater than best other
+                # - or confident support strictly greater than best other confident support
+                unique_by_var = (target_sup > best_other)
+                unique_by_conf = (target_csup > best_other_conf)
 
-            if (unique_by_var or unique_by_conf) and (penalty_const <= max_penalty):
-                # accepted: constant region ok AND variable region uniquely identifies barcode
-                return True
+                if (unique_by_var or unique_by_conf) and (penalty_const <= max_penalty):
+                    # accepted: constant region ok AND variable region uniquely identifies barcode
+                    return True
 
     return False
 
