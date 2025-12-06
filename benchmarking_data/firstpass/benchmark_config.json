@@ -1,0 +1,24 @@
+{
+  "configs": [
+    {
+      "name": "firstpass_default",
+      "description": "Default benchmark configuration for firstpass data",
+      "barcodes": "251202_primer_well_map_DA.csv",
+      "adapters": "251205_adapters_DA.py",
+      "flank": 100,
+      "max_penalty": 60,
+      "cpus": 4,
+      "min_length": 50
+    },
+    {
+      "name": "firstpass_high_stringency",
+      "description": "High stringency parameters for firstpass data",
+      "barcodes": "251202_primer_well_map_DA.csv",
+      "adapters": "251205_adapters_DA.py",
+      "flank": 150,
+      "max_penalty": 40,
+      "cpus": 4,
+      "min_length": 100
+    }
+  ]
+}

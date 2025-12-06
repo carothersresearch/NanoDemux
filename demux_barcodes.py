@@ -110,8 +110,7 @@ def load_barcodes(csv_file):
         well = r["Well Position"]  # e.g. A1
         letter, number = well[0], int(well[1:])
         full = r["Sequence"].strip().upper()
-        if "AGAT" not in full:
-            raise ValueError(f"No AGAT in adapter: {full}")
+        # Removed AGAT validation to support different barcode formats
         idx8 = full
         if r["Sequence Name"].startswith("R"):
             row_map[idx8] = letter

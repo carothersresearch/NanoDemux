@@ -4,6 +4,9 @@ Benchmarking suite for NanoDemux demultiplexing performance.
 
 This script runs the demultiplexing pipeline on sample data and tracks
 key performance metrics to measure improvements over time.
+
+Configuration files (benchmark_config.json or benchmark_config_*.json) in each
+subfolder define the parameters for running benchmarks on that data.
 """
 
 import os
@@ -15,7 +18,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from Bio import SeqIO
 
 
@@ -195,9 +198,10 @@ class DemuxBenchmark:
         return metrics
     
     def benchmark_dataset(self, name: str, fastq_file: str, 
-                         barcode_csv: str = "benchmarking_data/firstpass/251202_primer_well_map_DA.csv",
-                         adapter_file: str = "benchmarking_data/firstpass/251205_adapters_DA.py",
+                         barcode_csv: str = None,
+                         adapter_file: str = None,
                          subset: int = None,
+                         config_name: str = None,
                          **demux_params) -> Dict:
         """
         Run benchmark on a specific dataset.
@@ -206,7 +210,9 @@ class DemuxBenchmark:
             name: Benchmark identifier
             fastq_file: Path to input FASTQ
             barcode_csv: Path to barcode CSV
+            adapter_file: Path to adapter Python file
             subset: If specified, only process this many reads (for speed)
+            config_name: Name of the configuration used
             **demux_params: Additional parameters for demux_barcodes.py
         
         Returns:
@@ -214,6 +220,8 @@ class DemuxBenchmark:
         """
         print(f"\n{'='*70}")
         print(f"Benchmarking: {name}")
+        if config_name:
+            print(f"Config: {config_name}")
         print(f"{'='*70}")
         
         # Create subset if requested
@@ -244,6 +252,7 @@ class DemuxBenchmark:
         result = {
             'timestamp': datetime.now().isoformat(),
             'name': name,
+            'config_name': config_name,
             'fastq_file': fastq_file,
             'barcode_csv': barcode_csv,
             'adapter_file': adapter_file,
@@ -266,8 +275,11 @@ class DemuxBenchmark:
     def _print_result(self, result: Dict):
         """Print formatted benchmark result."""
         stats = result['statistics']
+        params = result['parameters']
         
         print(f"\n✅ Benchmark Complete: {result['name']}")
+        if result.get('config_name'):
+            print(f"   Config: {result['config_name']}")
         print(f"   Execution time: {result['execution_time']:.2f}s")
         print(f"\n📊 Statistics:")
         print(f"   Total reads:      {stats['total_reads']:,}")
@@ -283,7 +295,14 @@ class DemuxBenchmark:
                           stats.get('ambiguous_both', 0))
             print(f"   Ambiguous:        {ambig_total}")
         
+        print(f"\n🔧 Parameters:")
+        print(f"   Flank:            {params.get('flank', 'N/A')}")
+        print(f"   Max penalty:      {params.get('max_penalty', 'N/A')}")
+        print(f"   Min length:       {params.get('min_length', 'N/A')}")
+        print(f"   CPUs:             {params.get('cpus', 'N/A')}")
+        
         print(f"\n   Output: {result['output_dir']}")
+
     
     def compare_latest(self, n: int = 5):
         """
@@ -302,21 +321,29 @@ class DemuxBenchmark:
         print(f"Comparison of Last {len(recent)} Runs")
         print(f"{'='*70}\n")
         
-        # Create comparison table
-        headers = ['Timestamp', 'Name', 'Subset', 'Mapped', 'Mapping %', 'Wells', 'Time (s)']
+        # Create comparison table with parameters
+        headers = ['Timestamp', 'Name', 'Config', 'Subset', 'Mapped', 'Map %', 'Wells', 'F/P/L', 'Time']
         rows = []
         
         for r in recent:
             stats = r['statistics']
+            params = r.get('parameters', {})
             subset_info = f"{r.get('subset_reads', 'full'):,}" if r.get('subset_reads') else 'full'
+            config_name = r.get('config_name', 'N/A')[:12]
+            
+            # Format parameters as F/P/L (Flank/Penalty/Length)
+            param_str = f"{params.get('flank', '?')}/{params.get('max_penalty', '?')}/{params.get('min_length', '?')}"
+            
             rows.append([
                 r['timestamp'][:19],
-                r['name'][:20],
+                r['name'][:18],
+                config_name,
                 subset_info,
                 f"{stats['mapped_reads']:,}",
-                f"{stats['mapping_rate']:.2f}%",
+                f"{stats['mapping_rate']:.1f}%",
                 stats['wells_with_reads'],
-                f"{r['execution_time']:.2f}"
+                param_str,
+                f"{r['execution_time']:.1f}s"
             ])
         
         # Print table
@@ -331,6 +358,8 @@ class DemuxBenchmark:
         # Data rows
         for row in rows:
             print(' | '.join(str(cell).ljust(w) for cell, w in zip(row, col_widths)))
+        
+        print(f"\nF/P/L = Flank / Max Penalty / Min Length")
         
         # Calculate improvements
         if len(recent) >= 2:
@@ -389,6 +418,190 @@ class DemuxBenchmark:
         print(f"\n📄 Report saved to: {output_file}")
 
 
+def load_benchmark_configs(base_dir: str = "benchmarking_data") -> List[Dict]:
+    """
+    Load benchmark configurations from JSON files in subdirectories.
+    
+    Each subdirectory should have a benchmark_config.json file containing
+    a "configs" array with one or more configuration objects.
+    
+    Example format:
+    {
+      "configs": [
+        {
+          "name": "config1",
+          "description": "...",
+          "barcodes": "file.csv",
+          "adapters": "file.py",
+          "flank": 100,
+          "max_penalty": 60,
+          "cpus": 4,
+          "min_length": 50
+        }
+      ]
+    }
+    
+    Returns:
+        List of configuration dictionaries with expanded paths and FASTQ files
+    """
+    configs = []
+    base_path = Path(base_dir)
+    
+    if not base_path.exists():
+        print(f"Warning: {base_dir} not found")
+        return configs
+    
+    # Find all subdirectories
+    subdirs = [d for d in base_path.iterdir() if d.is_dir() and d.name != 'benchmarks']
+    
+    for subdir in sorted(subdirs):
+        # Look for benchmark_config.json (single file per directory)
+        config_file = subdir / "benchmark_config.json"
+        
+        if not config_file.exists():
+            print(f"⚠️  Skipping {subdir.name}: No benchmark_config.json found")
+            continue
+        
+        # Find all FASTQ files in this directory
+        fastq_files = sorted(subdir.glob("*.fastq"))
+        
+        if not fastq_files:
+            print(f"⚠️  Skipping {subdir.name}: No FASTQ files found")
+            continue
+        
+        # Load the config file
+        try:
+            with open(config_file, 'r') as f:
+                config_data = json.load(f)
+            
+            # Check for configs array
+            config_list = config_data.get('configs', [])
+            
+            # Support legacy single-config format
+            if not config_list and 'name' in config_data:
+                config_list = [config_data]
+            
+            if not config_list:
+                print(f"⚠️  Warning: No 'configs' array found in {config_file}")
+                continue
+            
+            # Process each config in the array
+            for config in config_list:
+                config_name = config.get('name', 'unnamed')
+                barcodes_file = config.get('barcodes')
+                adapters_file = config.get('adapters')
+                
+                # Make paths absolute relative to subdir
+                if barcodes_file:
+                    barcodes_path = subdir / barcodes_file
+                    if not barcodes_path.exists():
+                        print(f"⚠️  Warning: Barcode file not found: {barcodes_path}")
+                        barcodes_path = None
+                else:
+                    barcodes_path = None
+                
+                if adapters_file:
+                    adapters_path = subdir / adapters_file
+                    if not adapters_path.exists():
+                        print(f"⚠️  Warning: Adapter file not found: {adapters_path}")
+                        adapters_path = None
+                else:
+                    adapters_path = None
+                
+                # Create a benchmark config entry for each FASTQ file
+                for fastq_file in fastq_files:
+                    benchmark_config = {
+                        'name': f"{subdir.name}_{fastq_file.stem}",
+                        'config_name': config_name,
+                        'config_file': str(config_file),
+                        'fastq': str(fastq_file),
+                        'barcodes': str(barcodes_path) if barcodes_path else None,
+                        'adapters': str(adapters_path) if adapters_path else None,
+                        'subdir': subdir.name,
+                        'description': config.get('description', ''),
+                        'parameters': {
+                            'flank': config.get('flank', 100),
+                            'max_penalty': config.get('max_penalty', 60),
+                            'cpus': config.get('cpus', 4),
+                            'min_length': config.get('min_length', 50)
+                        }
+                    }
+                    configs.append(benchmark_config)
+                    
+        except json.JSONDecodeError as e:
+            print(f"❌ Error parsing {config_file}: {e}")
+        except Exception as e:
+            print(f"❌ Error loading {config_file}: {e}")
+    
+    return configs
+
+
+def discover_datasets(base_dir: str = "benchmarking_data") -> List[Dict]:
+    """
+    DEPRECATED: Use load_benchmark_configs instead.
+    
+    Dynamically discover all datasets in subdirectories of benchmarking_data.
+    This function is kept for backward compatibility but will use config files
+    if available, falling back to auto-detection.
+    """
+    # Try loading from config files first
+    configs = load_benchmark_configs(base_dir)
+    if configs:
+        return configs
+    
+    # Fallback to old auto-detection method
+    datasets = []
+    base_path = Path(base_dir)
+    
+    if not base_path.exists():
+        print(f"Warning: {base_dir} not found")
+        return datasets
+    
+    # Find all subdirectories
+    subdirs = [d for d in base_path.iterdir() if d.is_dir() and d.name != 'benchmarks']
+    
+    for subdir in sorted(subdirs):
+        # Find FASTQ files
+        fastq_files = list(subdir.glob("*.fastq"))
+        
+        if not fastq_files:
+            continue
+        
+        # Find barcode CSV (prefer demux_barcodes.csv, fallback to *well_map*.csv)
+        barcode_csv = None
+        if (subdir / "demux_barcodes.csv").exists():
+            barcode_csv = subdir / "demux_barcodes.csv"
+        else:
+            well_map_files = list(subdir.glob("*well_map*.csv"))
+            if well_map_files:
+                barcode_csv = well_map_files[0]
+        
+        # Find adapter Python file
+        adapter_file = None
+        adapter_files = list(subdir.glob("*adapters*.py"))
+        if adapter_files:
+            adapter_file = adapter_files[0]
+        
+        # Create dataset entry for each FASTQ file
+        for fastq_file in sorted(fastq_files):
+            dataset_name = f"{subdir.name}_{fastq_file.stem}"
+            datasets.append({
+                'name': dataset_name,
+                'fastq': str(fastq_file),
+                'barcodes': str(barcode_csv) if barcode_csv else None,
+                'adapters': str(adapter_file) if adapter_file else None,
+                'subdir': subdir.name,
+                'parameters': {
+                    'flank': 100,
+                    'max_penalty': 60,
+                    'cpus': 4,
+                    'min_length': 50
+                }
+            })
+    
+    return datasets
+
+
 def main():
     """Run benchmarks on sample datasets."""
     import argparse
@@ -411,6 +624,9 @@ Examples:
   
   # Custom parameters
   python benchmark_demux.py --subset 500 --flank 150 --max-penalty 80
+  
+  # List available datasets
+  python benchmark_demux.py --list
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -421,6 +637,10 @@ Examples:
     parser.add_argument(
         "--report", "-r", action="store_true",
         help="Generate markdown report"
+    )
+    parser.add_argument(
+        "--list", "-l", action="store_true",
+        help="List all available datasets"
     )
     parser.add_argument(
         "--flank", type=int, default=100,
@@ -443,12 +663,12 @@ Examples:
         help="Run on full dataset (equivalent to --subset 0)"
     )
     parser.add_argument(
-        "--barcodes", dest="barcode_file", default="benchmarking_data/firstpass/251202_primer_well_map_DA.csv",
-        help="Barcode CSV to use for benchmarking (default: benchmarking_data/firstpass/251202_primer_well_map_DA.csv)"
+        "--data-dir", default="benchmarking_data",
+        help="Base directory containing benchmark data subfolders (default: benchmarking_data)"
     )
     parser.add_argument(
-        "--adapters", dest="adapter_file", default="benchmarking_data/firstpass/251205_adapters_DA.py",
-        help="Adapter Python file defining ADAPTERS list (default: benchmarking_data/firstpass/251205_adapters_DA.py)"
+        "--override-params", action="store_true",
+        help="Override config file parameters with command line arguments"
     )
     
     args = parser.parse_args()
@@ -464,56 +684,102 @@ Examples:
         bench.generate_report()
         return
     
-    # Run benchmarks on available datasets
+    # Load configurations from config files
+    configs = load_benchmark_configs(args.data_dir)
+    
+    if not configs:
+        print(f"❌ No benchmark configurations found in {args.data_dir}")
+        print(f"   Expected: benchmark_config.json files in subfolders")
+        print(f"   Each subfolder should contain:")
+        print(f"     - benchmark_config.json (or benchmark_config_*.json)")
+        print(f"     - *.fastq files")
+        print(f"     - barcode CSV and adapter Python files")
+        return
+    
+    # List datasets if requested
+    if args.list:
+        print(f"\n📦 Found {len(configs)} benchmark configuration(s) in {args.data_dir}:\n")
+        for cfg in configs:
+            print(f"  • {cfg['name']}")
+            print(f"    Config:   {cfg['config_name']} ({cfg['config_file']})")
+            print(f"    FASTQ:    {cfg['fastq']}")
+            print(f"    Barcodes: {cfg['barcodes'] or 'NOT FOUND'}")
+            print(f"    Adapters: {cfg['adapters'] or 'NOT FOUND'}")
+            params = cfg['parameters']
+            print(f"    Params:   flank={params['flank']}, max_penalty={params['max_penalty']}, " +
+                  f"cpus={params['cpus']}, min_length={params['min_length']}")
+            if cfg.get('description'):
+                print(f"    Description: {cfg['description']}")
+            print()
+        return
+    
+    # Run benchmarks on all configurations
     subset_size = 0 if args.full else args.subset
     
-    datasets = [
-        {
-            'name': '55XPXK',
-            'fastq': 'benchmarking_data/firstpass/55XPXK_1_P4_323_EG.fastq',
-            'subset': subset_size if subset_size > 0 else None,
-            'barcodes': args.barcode_file,
-            'adapters': args.adapter_file
-        },
-        {
-            'name': 'VL69M6',
-            'fastq': 'benchmarking_data/firstpass/VL69M6_1_P4_323_full.fastq',
-            'subset': subset_size if subset_size > 0 else None,
-            'barcodes': args.barcode_file,
-            'adapters': args.adapter_file
-        }
-    ]
+    print(f"\n🔬 Running benchmarks on {len(configs)} configuration(s)")
+    print(f"   Subset size: {'FULL' if subset_size == 0 else f'{subset_size:,} reads'}")
+    if args.override_params:
+        print(f"   ⚠️  Overriding config parameters with CLI args")
+        print(f"   Flank: {args.flank}, Max penalty: {args.max_penalty}, CPUs: {args.cpus}")
+    else:
+        print(f"   Using parameters from config files")
+    print()
     
-    demux_params = {
-        'flank': args.flank,
-        'max_penalty': args.max_penalty,
-        'cpus': args.cpus,
-        'min_length': 50
-    }
+    successful = 0
+    failed = 0
     
-    for dataset in datasets:
-        if not Path(dataset['fastq']).exists():
-            print(f"⚠️  Skipping {dataset['name']}: file not found")
+    for config in configs:
+        if not Path(config['fastq']).exists():
+            print(f"⚠️  Skipping {config['name']}: FASTQ file not found")
+            failed += 1
             continue
+        
+        if not config['barcodes']:
+            print(f"⚠️  Skipping {config['name']}: No barcode CSV found")
+            failed += 1
+            continue
+        
+        # Use parameters from config, or override with CLI args
+        if args.override_params:
+            demux_params = {
+                'flank': args.flank,
+                'max_penalty': args.max_penalty,
+                'cpus': args.cpus,
+                'min_length': 50
+            }
+        else:
+            demux_params = config['parameters'].copy()
         
         try:
             bench.benchmark_dataset(
-                name=dataset['name'],
-                fastq_file=dataset['fastq'],
-                barcode_csv=dataset['barcodes'],
-                adapter_file=dataset.get('adapters'),
-                subset=dataset.get('subset'),  # Pass subset parameter
+                name=config['name'],
+                fastq_file=config['fastq'],
+                barcode_csv=config['barcodes'],
+                adapter_file=config.get('adapters'),
+                subset=subset_size if subset_size > 0 else None,
+                config_name=config.get('config_name'),
                 **demux_params
             )
+            successful += 1
         except Exception as e:
-            print(f"❌ Error benchmarking {dataset['name']}: {e}")
+            print(f"❌ Error benchmarking {config['name']}: {e}")
+            import traceback
+            traceback.print_exc()
+            failed += 1
+    
+    print(f"\n{'='*70}")
+    print(f"✅ Completed: {successful}/{len(configs)} configurations")
+    if failed > 0:
+        print(f"❌ Failed: {failed}")
+    print(f"{'='*70}")
     
     # Show comparison
-    print()
-    bench.compare_latest(n=5)
-    
-    # Generate report
-    bench.generate_report()
+    if successful > 0:
+        print()
+        bench.compare_latest(n=min(10, len(configs) * 2))
+        
+        # Generate report
+        bench.generate_report()
     
     # Clean up subset files
     bench.cleanup_subset_files()

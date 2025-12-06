@@ -1,0 +1,14 @@
+{
+  "configs": [
+    {
+      "name": "251205_AR_default",
+      "description": "Default benchmark configuration for 251205_AR data",
+      "barcodes": "demux_barcodes.csv",
+      "adapters": "251205_adapters_AR.py",
+      "flank": 100,
+      "max_penalty": 60,
+      "cpus": 4,
+      "min_length": 50
+    }
+  ]
+}
