@@ -1,4 +1,4 @@
-.PHONY: help test test-fast test-cov test-verbose test-unittest test-pytest install lint clean benchmark benchmark-fast benchmark-full benchmark-compare
+.PHONY: help test test-fast test-cov test-verbose test-unittest test-pytest install lint clean benchmark benchmark-fast benchmark-full benchmark-compare report
 
 help:
 	@echo "NanoDemux Makefile targets:"
@@ -14,6 +14,7 @@ help:
 	@echo "  make benchmark-fast   Quick benchmark (100 reads, ~5 seconds)"
 	@echo "  make benchmark-full   Full dataset benchmark (slow, several minutes)"
 	@echo "  make benchmark-compare Compare recent benchmark results"
+	@echo "  make report           Generate quality report for example demux output"
 	@echo "  make lint             Run code quality checks"
 	@echo "  make clean            Remove temporary files and cache"
 	@echo ""
@@ -56,6 +57,15 @@ benchmark-full:
 
 benchmark-compare:
 	python benchmark_demux.py --compare 5
+
+report:
+	@echo "Generating quality report for example demux output..."
+	@if [ -d "demplex_data/55XPXK_1_P4_323_EG" ]; then \
+		python generate_quality_report.py demplex_data/55XPXK_1_P4_323_EG/ barcodes/251202_primer_well_map_DA.csv; \
+	else \
+		echo "Error: Example demux output not found. Run demultiplexing first:"; \
+		echo "  python demux_barcodes.py raw_data/55XPXK_1_P4_323_EG.fastq barcodes/251202_primer_well_map_DA.csv --cpus 2"; \
+	fi
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + || true

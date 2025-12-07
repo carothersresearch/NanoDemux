@@ -265,7 +265,7 @@ def write_barcode_grid_csv(stats, outpath):
 # Process a single FASTQ file
 # ---------------------------------
 
-def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None):
+def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None, generate_report=False):
     """Process a single FASTQ file and demultiplex reads."""
     os.makedirs(outdir, exist_ok=True)
     row_map, col_map = load_barcodes(barcode_csv)
@@ -288,12 +288,25 @@ def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty
     # Save stats grid
     write_barcode_grid_csv(all_stats, os.path.join(outdir, "barcode_stats.csv"))
     print(f"✅ Processed {fastq_file}")
+    
+    # Generate quality report if requested
+    if generate_report:
+        try:
+            print(f"📊 Generating quality report...")
+            import subprocess
+            subprocess.run([
+                'python', 'generate_quality_report.py',
+                outdir, barcode_csv
+            ], check=True)
+        except Exception as e:
+            print(f"⚠️  Warning: Could not generate quality report: {e}")
+
 
 # ---------------------------------
 # Main function - handles both files and directories
 # ---------------------------------
 
-def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None):
+def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None, generate_report=False):
     """
     Main entry point that handles both single files and directories.
     
@@ -306,6 +319,7 @@ def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank,
         cpus: Number of CPU cores
         flank: Number of bases at each end to search
         adapter_file: Optional adapter file
+        generate_report: Whether to generate quality report after demultiplexing
     """
     # Check if input is a file or directory
     if os.path.isfile(fastq_input):
@@ -315,7 +329,7 @@ def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank,
             basename = get_basename_without_extensions(fastq_input)
             outdir = os.path.join("demplex_data", basename)
         print(f"Processing single file: {fastq_input}")
-        process_single_file(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file)
+        process_single_file(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file, generate_report)
     elif os.path.isdir(fastq_input):
         # Directory mode - process all FASTQ files
         print(f"Processing directory: {fastq_input}")
@@ -338,7 +352,7 @@ def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank,
             file_basename = get_basename_without_extensions(fastq_file)
             file_outdir = os.path.join(base_outdir, file_basename)
             print(f"\n📂 Processing: {os.path.basename(fastq_file)}")
-            process_single_file(fastq_file, barcode_csv, file_outdir, min_length, max_penalty, cpus, flank, adapter_file)
+            process_single_file(fastq_file, barcode_csv, file_outdir, min_length, max_penalty, cpus, flank, adapter_file, generate_report)
         
         print(f"\n✅ All files processed. Output in: {base_outdir}")
     else:
@@ -363,6 +377,10 @@ Examples:
   # Multiple files - process all FASTQ files in a directory
   python demux_barcodes.py raw_data/experiment1/ barcodes/251202_primer_well_map_DA.csv \\
       --adapters barcodes/251205_adapters_DA.py --cpus 4
+  
+  # Generate quality report after demultiplexing
+  python demux_barcodes.py raw_data/reads.fastq barcodes/251202_primer_well_map_DA.csv \\
+      --report
       
   Note: When processing a directory, output will be in demplex_data/<dirname>/<filename>/
         When processing a single file, output will be in demplex_data/<filename>/ (unless --outdir is specified)
@@ -378,6 +396,8 @@ Examples:
     parser.add_argument("--max_penalty", type=float, default=60, help="Max allowed mismatch penalty (sum of Phred scores) [default: 60]")
     parser.add_argument("--cpus", type=int, default=1, help="Number of CPU cores to use [default: 1]")
     parser.add_argument("--flank", type=int, default=100, help="Number of bases at each end to search for barcodes [default: 100]")
+    parser.add_argument("--report", "-r", action="store_true", 
+                        help="Generate graphical quality report with MSA, read lengths, and barcode analysis after demultiplexing")
     args = parser.parse_args()
 
-    main(args.fastq, args.barcodes, args.outdir, args.min_length, args.max_penalty, args.cpus, args.flank, args.adapter_file)
+    main(args.fastq, args.barcodes, args.outdir, args.min_length, args.max_penalty, args.cpus, args.flank, args.adapter_file, args.report)
