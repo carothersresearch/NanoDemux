@@ -211,16 +211,45 @@ Example:
 | `--flank` | `100` | Number of bases at each read end to search for barcodes |
 | `--adapters` | `None` | Optional Python file defining ADAPTERS list for adapter detection |
 | `--report` | `False` | Generate graphical quality report with MSA, read lengths, and barcode analysis |
+| `--raw-report` | `False` | Generate graphical quality report for raw (unmultiplexed) data |
 
 ## Graphical Quality Reports
 
-NanoDemux can generate comprehensive graphical quality reports showing:
+NanoDemux can generate two types of quality reports:
+
+### 1. Raw Data Quality Reports
+
+Analyze unmultiplexed FASTQ files before demultiplexing to assess overall data quality:
+- **Read Length Distribution**: Histograms and box plots with N50 statistics
+- **Quality Score Distribution**: Mean quality per read and quality by position analysis
+- **Base Composition**: Nucleotide distribution and GC content
+- **General Statistics**: Total reads, total bases, mean/median lengths
+
+#### Generate Raw Data Reports
+
+```bash
+# Automatically generate raw report before demultiplexing
+python demux_barcodes.py raw_data/reads.fastq barcodes/primer_well_map.csv --raw-report
+
+# Or generate raw report separately
+python generate_raw_quality_report.py raw_data/reads.fastq
+
+# Generate raw report with custom output directory
+python generate_raw_quality_report.py raw_data/reads.fastq --output reports/raw_qc/
+
+# Analyze only first 10000 reads for faster processing
+python generate_raw_quality_report.py raw_data/large_sample.fastq --max-reads 10000
+```
+
+### 2. Demultiplexed Data Quality Reports
+
+Analyze demultiplexed data after barcode matching:
 - **Multiple Sequence Alignment (MSA) Layout**: Visualization of read positions and lengths, similar to [SeqAn ReadLayout](https://seqan.readthedocs.io/en/seqan-v1.4.2/Tutorial/FragmentStore.html), with barcode positions highlighted
 - **Read Length Distribution**: Histograms and box plots showing read length statistics across all wells
 - **Barcode Position Analysis**: Heatmaps showing where row and column barcodes are detected within reads
 - **Barcode Presence Summary**: 96-well plate heatmap with read distribution statistics
 
-### Generate Reports
+#### Generate Demultiplexed Reports
 
 ```bash
 # Automatically generate report during demultiplexing
@@ -230,7 +259,9 @@ python demux_barcodes.py raw_data/reads.fastq barcodes/primer_well_map.csv --rep
 python generate_quality_report.py demplex_data/55XPXK_1_P4_323_EG/ barcodes/primer_well_map.csv
 ```
 
-Reports are saved as HTML files with embedded visualizations in the `quality_report/` subdirectory of your output folder.
+Reports are saved as HTML files with embedded visualizations:
+- Raw data reports: `raw_data_quality_report/raw_quality_report.html` (default) or in the output directory's `raw_quality_report/` subdirectory
+- Demultiplexed reports: `quality_report/` subdirectory of your demux output folder
 
 ## Input Files
 
