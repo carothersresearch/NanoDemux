@@ -8,7 +8,7 @@
       "flank": 100,
       "max_penalty": 60,
       "cpus": 4,
-      "min_length": 50
+      "min_length": 500
     }
   ]
 }
