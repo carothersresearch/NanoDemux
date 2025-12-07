@@ -15,6 +15,9 @@ from collections import defaultdict
 import os
 from multiprocessing import Pool
 import glob
+import sys
+
+
 import itertools
 import parasail
 import numpy as np
@@ -638,7 +641,7 @@ def write_barcode_grid_csv(stats, outpath):
 # Process a single FASTQ file
 # ---------------------------------
 
-def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None, var_q=10, use_fallback=True):
+def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None, var_q=10, use_fallback=True, , generate_report=False):
     """Process a single FASTQ file with improved two-tiered barcode matching."""
     os.makedirs(outdir, exist_ok=True)
     row_map, col_map = load_barcodes(barcode_csv)
@@ -679,12 +682,28 @@ def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty
         print(f"  Alignment fallback (cols): {method_stats.get('col_alignment', 0)}")
     
     print(f"✅ Processed {fastq_file}")
+    
+    # Generate quality report if requested
+    if generate_report:
+        try:
+            print(f"📊 Generating quality report...")
+            import subprocess
+            # Use sys.executable for portability and construct path relative to current script
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            report_script = os.path.join(script_dir, 'generate_quality_report.py')
+            subprocess.run([
+                sys.executable, report_script,
+                outdir, barcode_csv
+            ], check=True)
+        except Exception as e:
+            print(f"⚠️  Warning: Could not generate quality report: {e}")
+
 
 # ---------------------------------
 # Main function - handles both files and directories
 # ---------------------------------
 
-def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None, var_q=10, use_fallback=True):
+def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None, var_q=10, use_fallback=True, generate_report=False):
     """
     Main entry point that handles both single files and directories with improved two-tiered barcode matching.
     
@@ -697,6 +716,7 @@ def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank,
         cpus: Number of CPU cores
         flank: Number of bases at each end to search
         adapter_file: Optional adapter file
+        generate_report: Whether to generate quality report after demultiplexing
         var_q: Phred cutoff to call a variable-base match 'confident' (default: 10)
         use_fallback: Use alignment fallback for ambiguous cases (default: True)
     """
@@ -708,7 +728,7 @@ def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank,
             basename = get_basename_without_extensions(fastq_input)
             outdir = os.path.join("demplex_data", basename)
         print(f"Processing single file: {fastq_input}")
-        process_single_file(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file, var_q, use_fallback)
+        process_single_file(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file, var_q, use_fallback, generate_report)
     elif os.path.isdir(fastq_input):
         # Directory mode - process all FASTQ files
         print(f"Processing directory: {fastq_input}")
@@ -731,7 +751,7 @@ def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank,
             file_basename = get_basename_without_extensions(fastq_file)
             file_outdir = os.path.join(base_outdir, file_basename)
             print(f"\n📂 Processing: {os.path.basename(fastq_file)}")
-            process_single_file(fastq_file, barcode_csv, file_outdir, min_length, max_penalty, cpus, flank, adapter_file, var_q, use_fallback)
+            process_single_file(fastq_file, barcode_csv, file_outdir, min_length, max_penalty, cpus, flank, adapter_file, var_q, use_fallback, generate_report)
         
         print(f"\n✅ All files processed. Output in: {base_outdir}")
     else:
@@ -756,6 +776,10 @@ Examples:
   # Multiple files - process all FASTQ files in a directory
   python demux_barcodes.py raw_data/experiment1/ barcodes/251202_primer_well_map_DA.csv \\
       --adapters barcodes/251205_adapters_DA.py --cpus 4
+  
+  # Generate quality report after demultiplexing
+  python demux_barcodes.py raw_data/reads.fastq barcodes/251202_primer_well_map_DA.csv \\
+      --report
       
   Note: When processing a directory, output will be in demplex_data/<dirname>/<filename>/
         When processing a single file, output will be in demplex_data/<filename>/ (unless --outdir is specified)
@@ -775,6 +799,8 @@ Examples:
                         help="Phred cutoff to call a variable-base match 'confident' [default: 10]")
     parser.add_argument("--no-fallback", dest="use_fallback", action="store_false", default=True,
                         help="Disable alignment fallback for ambiguous cases (use only fast filter) [default: enabled]")
+    parser.add_argument("--report", "-r", action="store_true", 
+                        help="Generate graphical quality report with MSA, read lengths, and barcode analysis after demultiplexing")
     args = parser.parse_args()
 
-    main(args.fastq, args.barcodes, args.outdir, args.min_length, args.max_penalty, args.cpus, args.flank, args.adapter_file, args.var_q, args.use_fallback)
+    main(args.fastq, args.barcodes, args.outdir, args.min_length, args.max_penalty, args.cpus, args.flank, args.adapter_file, args.var_q, args.use_fallback, args.report)

@@ -4,6 +4,7 @@ output/
 test_output/
 *_reads.fastq
 barcode_stats.csv
+quality_report/
 
 # Benchmarking
 benchmarks/

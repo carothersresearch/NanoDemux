@@ -210,6 +210,27 @@ Example:
 | `--cpus` | `1` | Number of CPU cores for parallel processing |
 | `--flank` | `100` | Number of bases at each read end to search for barcodes |
 | `--adapters` | `None` | Optional Python file defining ADAPTERS list for adapter detection |
+| `--report` | `False` | Generate graphical quality report with MSA, read lengths, and barcode analysis |
+
+## Graphical Quality Reports
+
+NanoDemux can generate comprehensive graphical quality reports showing:
+- **Multiple Sequence Alignment (MSA) Layout**: Visualization of read positions and lengths, similar to [SeqAn ReadLayout](https://seqan.readthedocs.io/en/seqan-v1.4.2/Tutorial/FragmentStore.html), with barcode positions highlighted
+- **Read Length Distribution**: Histograms and box plots showing read length statistics across all wells
+- **Barcode Position Analysis**: Heatmaps showing where row and column barcodes are detected within reads
+- **Barcode Presence Summary**: 96-well plate heatmap with read distribution statistics
+
+### Generate Reports
+
+```bash
+# Automatically generate report during demultiplexing
+python demux_barcodes.py raw_data/reads.fastq barcodes/primer_well_map.csv --report
+
+# Or generate report separately from existing demux output
+python generate_quality_report.py demplex_data/55XPXK_1_P4_323_EG/ barcodes/primer_well_map.csv
+```
+
+Reports are saved as HTML files with embedded visualizations in the `quality_report/` subdirectory of your output folder.
 
 ## Input Files
 
