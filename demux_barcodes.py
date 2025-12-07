@@ -8,6 +8,7 @@ from collections import defaultdict
 import os
 from multiprocessing import Pool
 import glob
+import sys
 
 
 
@@ -294,8 +295,11 @@ def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty
         try:
             print(f"📊 Generating quality report...")
             import subprocess
+            # Use sys.executable for portability and construct path relative to current script
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            report_script = os.path.join(script_dir, 'generate_quality_report.py')
             subprocess.run([
-                'python', 'generate_quality_report.py',
+                sys.executable, report_script,
                 outdir, barcode_csv
             ], check=True)
         except Exception as e:

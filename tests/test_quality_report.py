@@ -16,6 +16,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import generate_quality_report
 
+# Test barcode sequences (extracted for clarity)
+TEST_ROW_BARCODE = "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC"
+TEST_COL_BARCODE = "CAAGCAGAAGACGGCATACGAGATATTACTCGGTCTCGTGGGCTCGG"
+TEST_READ_SPACER = "N" * 100
+
 
 class TestQualityReport(unittest.TestCase):
     """Test quality report generation."""
@@ -57,7 +62,8 @@ B1,F oDA361.D701,CAAGCAGAAGACGGCATACGAGATATTACTCGGTCTCGTGGGCTCGG
         for well in wells:
             records = []
             for i in range(5):
-                seq = "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC" + "N" * 100 + "CAAGCAGAAGACGGCATACGAGATATTACTCGGTCTCGTGGGCTCGG"
+                # Construct read with test barcodes and spacer
+                seq = TEST_ROW_BARCODE + TEST_READ_SPACER + TEST_COL_BARCODE
                 qual = "I" * len(seq)
                 record = SeqRecord(
                     Seq(seq),

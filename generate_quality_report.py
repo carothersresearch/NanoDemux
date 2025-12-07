@@ -164,18 +164,21 @@ def plot_msa_layout(demux_dir, barcodes, output_file, max_reads=100):
     color_palette = sns.color_palette("husl", 96)  # 96 well plate
     color_idx = 0
     
-    for fastq_file in sorted(os.listdir(demux_dir)):
-        if fastq_file.endswith('_reads.fastq'):
-            well = fastq_file.replace('_reads.fastq', '')
-            well_colors[well] = color_palette[color_idx % len(color_palette)]
-            color_idx += 1
-            
-            fastq_path = os.path.join(demux_dir, fastq_file)
-            reads_data = analyze_well_reads(fastq_path, barcodes)
-            
-            for read_data in reads_data[:max_reads // len([f for f in os.listdir(demux_dir) if f.endswith('_reads.fastq')])]:
-                read_data['well'] = well
-                all_reads.append(read_data)
+    # Count fastq files first for efficient division
+    fastq_files = [f for f in os.listdir(demux_dir) if f.endswith('_reads.fastq')]
+    reads_per_well = max_reads // len(fastq_files) if fastq_files else max_reads
+    
+    for fastq_file in sorted(fastq_files):
+        well = fastq_file.replace('_reads.fastq', '')
+        well_colors[well] = color_palette[color_idx % len(color_palette)]
+        color_idx += 1
+        
+        fastq_path = os.path.join(demux_dir, fastq_file)
+        reads_data = analyze_well_reads(fastq_path, barcodes)
+        
+        for read_data in reads_data[:reads_per_well]:
+            read_data['well'] = well
+            all_reads.append(read_data)
     
     if not all_reads:
         print("⚠️  No reads found for MSA layout")
