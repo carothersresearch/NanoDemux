@@ -29,6 +29,10 @@ sns.set_style("whitegrid")
 plt.rcParams['figure.dpi'] = 100
 plt.rcParams['savefig.dpi'] = 300
 
+# Alignment constants for Smith-Waterman
+ALIGNMENT_GAP_OPEN = 2
+ALIGNMENT_GAP_EXTEND = 1
+
 
 def load_barcode_map(barcode_csv):
     """Load barcode sequences from CSV file."""
@@ -366,7 +370,7 @@ def align_read_to_anchor(read_seq, anchor_seq):
     matrix = parasail.matrix_create("ACGT", 2, -1)
     
     # Perform Smith-Waterman alignment with traceback
-    result = parasail.sw_trace_scan_16(read_seq, anchor_seq, 2, 1, matrix)
+    result = parasail.sw_trace_scan_16(read_seq, anchor_seq, ALIGNMENT_GAP_OPEN, ALIGNMENT_GAP_EXTEND, matrix)
     
     # Get traceback
     traceback = result.get_traceback()
@@ -439,7 +443,11 @@ def plot_anchor_msa(demux_dir, anchor_seq, output_file, max_reads=100):
     if not all_reads:
         print("⚠️  No reads found for anchor MSA")
         plt.close()
-        return
+        return {
+            'num_aligned': 0,
+            'mean_score': 0,
+            'median_score': 0
+        }
     
     # Limit to max_reads
     all_reads = all_reads[:max_reads]
