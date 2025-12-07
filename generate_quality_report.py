@@ -22,6 +22,7 @@ from matplotlib.patches import Rectangle
 import numpy as np
 import seaborn as sns
 from datetime import datetime
+import parasail
 
 # Set style
 sns.set_style("whitegrid")
@@ -350,8 +351,217 @@ def plot_barcode_presence_summary(stats_csv, output_file):
     print(f"✅ Barcode presence summary saved to {output_file}")
 
 
-def generate_html_report(demux_dir, report_dir, stats):
+def align_read_to_anchor(read_seq, anchor_seq):
+    """
+    Align a read sequence to an anchor sequence using Smith-Waterman local alignment.
+    
+    Parameters:
+        read_seq (str): Read sequence
+        anchor_seq (str): Anchor/reference sequence
+    
+    Returns:
+        dict: Alignment information including position, score, and aligned sequences
+    """
+    # Create alignment matrix (match=2, mismatch=-1)
+    matrix = parasail.matrix_create("ACGT", 2, -1)
+    
+    # Perform Smith-Waterman alignment with traceback
+    result = parasail.sw_trace_scan_16(read_seq, anchor_seq, 2, 1, matrix)
+    
+    # Get traceback
+    traceback = result.get_traceback()
+    
+    # Calculate begin positions from end positions and lengths
+    # In parasail, end positions are 0-based inclusive
+    ref_end = result.end_ref + 1  # Convert to exclusive end
+    query_end = result.end_query + 1  # Convert to exclusive end
+    ref_begin = max(0, ref_end - result.len_ref)
+    query_begin = max(0, query_end - result.len_query)
+    
+    return {
+        'score': result.score,
+        'ref_begin': ref_begin,
+        'ref_end': ref_end,
+        'read_begin': query_begin,
+        'read_end': query_end,
+        'length': result.len_ref,
+        'traceback': traceback
+    }
+
+
+def plot_anchor_msa(demux_dir, anchor_seq, output_file, max_reads=100):
+    """
+    Create MSA visualization showing alignment of reads to an anchor sequence.
+    
+    Parameters:
+        demux_dir (str): Directory containing demultiplexed FASTQ files
+        anchor_seq (str): Anchor/reference sequence to align reads to
+        output_file (str): Output file path for the plot
+        max_reads (int): Maximum number of reads to visualize
+    """
+    fig, ax = plt.subplots(figsize=(16, 12))
+    
+    # Collect reads from all wells
+    all_reads = []
+    well_colors = {}
+    color_palette = sns.color_palette("husl", 96)
+    color_idx = 0
+    
+    # Count fastq files for efficient division
+    fastq_files = [f for f in os.listdir(demux_dir) if f.endswith('_reads.fastq')]
+    reads_per_well = max(1, max_reads // len(fastq_files)) if fastq_files else max_reads
+    
+    for fastq_file in sorted(fastq_files):
+        well = fastq_file.replace('_reads.fastq', '')
+        well_colors[well] = color_palette[color_idx % len(color_palette)]
+        color_idx += 1
+        
+        fastq_path = os.path.join(demux_dir, fastq_file)
+        
+        read_count = 0
+        for record in SeqIO.parse(fastq_path, "fastq"):
+            if read_count >= reads_per_well:
+                break
+            
+            seq = str(record.seq).upper()
+            
+            # Align read to anchor
+            alignment_info = align_read_to_anchor(seq, anchor_seq.upper())
+            
+            all_reads.append({
+                'id': record.id,
+                'well': well,
+                'length': len(seq),
+                'alignment': alignment_info
+            })
+            read_count += 1
+    
+    if not all_reads:
+        print("⚠️  No reads found for anchor MSA")
+        plt.close()
+        return
+    
+    # Limit to max_reads
+    all_reads = all_reads[:max_reads]
+    
+    # Sort reads by alignment position on anchor for better visualization
+    all_reads.sort(key=lambda x: x['alignment']['ref_begin'])
+    
+    # Plot anchor sequence as a reference bar at the top
+    anchor_length = len(anchor_seq)
+    ax.add_patch(Rectangle((0, -2), anchor_length, 1.0, 
+                           facecolor='gold', 
+                           edgecolor='black', 
+                           linewidth=2,
+                           alpha=0.8,
+                           label='Anchor Sequence'))
+    
+    # Plot each read aligned to the anchor
+    y_position = 0
+    y_spacing = 1.0
+    max_ref_pos = anchor_length
+    
+    for read in all_reads:
+        well = read['well']
+        alignment = read['alignment']
+        
+        # Only plot if there's a reasonable alignment
+        if alignment['score'] > 0:
+            # Calculate read position relative to anchor
+            ref_start = alignment['ref_begin']
+            ref_end = alignment['ref_end']
+            
+            # Draw aligned portion
+            aligned_length = ref_end - ref_start
+            rect = Rectangle((ref_start, y_position), aligned_length, 0.8,
+                           facecolor=well_colors[well],
+                           edgecolor='black',
+                           linewidth=0.5,
+                           alpha=0.7)
+            ax.add_patch(rect)
+            
+            # Update max position if needed
+            max_ref_pos = max(max_ref_pos, ref_end)
+        
+        y_position += y_spacing
+    
+    # Set axis properties
+    ax.set_xlim(-10, max_ref_pos + 10)
+    ax.set_ylim(-3, y_position + 1)
+    ax.set_xlabel('Position on Anchor Sequence (bp)', fontsize=12, fontweight='bold')
+    ax.set_ylabel('Reads', fontsize=12, fontweight='bold')
+    ax.set_title(f'Multiple Sequence Alignment to Anchor\n(showing {len(all_reads)} reads aligned to {len(anchor_seq)} bp anchor)', 
+                 fontsize=14, fontweight='bold', pad=20)
+    
+    # Add legend
+    legend_elements = [
+        mpatches.Patch(facecolor='gold', edgecolor='black', label='Anchor Sequence', alpha=0.8)
+    ]
+    
+    # Add top wells to legend
+    well_counts = defaultdict(int)
+    for read in all_reads:
+        well_counts[read['well']] += 1
+    
+    top_wells = sorted(well_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+    for well, count in top_wells:
+        legend_elements.append(
+            mpatches.Patch(facecolor=well_colors[well], edgecolor='black',
+                          label=f'Well {well} ({count} reads)', alpha=0.7)
+        )
+    
+    ax.legend(handles=legend_elements, loc='upper right', fontsize=10)
+    ax.grid(True, alpha=0.3, axis='x')
+    
+    # Add a horizontal line to separate anchor from reads
+    ax.axhline(y=-1, color='black', linestyle='--', linewidth=1, alpha=0.5)
+    
+    plt.tight_layout()
+    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print(f"✅ Anchor MSA visualization saved to {output_file}")
+    
+    # Return alignment statistics
+    alignment_scores = [r['alignment']['score'] for r in all_reads if r['alignment']['score'] > 0]
+    return {
+        'num_aligned': len(alignment_scores),
+        'mean_score': np.mean(alignment_scores) if alignment_scores else 0,
+        'median_score': np.median(alignment_scores) if alignment_scores else 0
+    }
+
+
+def generate_html_report(demux_dir, report_dir, stats, anchor_stats=None):
     """Generate HTML report combining all visualizations."""
+    
+    # Build anchor section if anchor stats are provided
+    anchor_section = ""
+    if anchor_stats:
+        anchor_section = f"""
+        <h2>🎯 Anchor Sequence Alignment</h2>
+        <p>Multiple Sequence Alignment of reads to the provided anchor sequence. The gold bar at the top represents the anchor/reference sequence, and each colored bar below shows where a read aligns to the anchor. Reads are sorted by alignment position for clarity.</p>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>ALIGNED READS</h3>
+                <div class="value">{anchor_stats.get('num_aligned', 0):,}</div>
+                <div class="unit">reads</div>
+            </div>
+            <div class="stat-card">
+                <h3>MEAN ALIGNMENT SCORE</h3>
+                <div class="value">{anchor_stats.get('mean_score', 0):.1f}</div>
+                <div class="unit">score</div>
+            </div>
+            <div class="stat-card">
+                <h3>MEDIAN ALIGNMENT SCORE</h3>
+                <div class="value">{anchor_stats.get('median_score', 0):.1f}</div>
+                <div class="unit">score</div>
+            </div>
+        </div>
+        
+        <img src="anchor_msa.png" alt="Anchor MSA">
+        """
+    
     html_content = f"""
 <!DOCTYPE html>
 <html>
@@ -464,6 +674,8 @@ def generate_html_report(demux_dir, report_dir, stats):
             </div>
         </div>
         
+        {anchor_section}
+        
         <h2>📏 Read Length Distribution</h2>
         <p>Distribution of read lengths across all wells, showing both overall histogram and per-well box plots for the top 10 wells by read count.</p>
         <img src="read_length_distribution.png" alt="Read Length Distribution">
@@ -510,6 +722,11 @@ Examples:
   # Generate report with custom output directory
   python generate_quality_report.py demplex_data/experiment1/sample1/ \\
       barcodes/primer_well_map.csv --output reports/sample1/
+  
+  # Generate report with anchor sequence MSA
+  python generate_quality_report.py demplex_data/55XPXK_1_P4_323_EG/ \\
+      barcodes/251202_primer_well_map_DA.csv \\
+      --anchor-seq AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC
         """
     )
     
@@ -519,6 +736,8 @@ Examples:
                        help='Output directory for report (default: demux_dir/quality_report/)')
     parser.add_argument('--max-reads', type=int, default=100,
                        help='Maximum number of reads to show in MSA layout (default: 100)')
+    parser.add_argument('--anchor-seq', default=None,
+                       help='Anchor/reference sequence for MSA alignment (optional)')
     
     args = parser.parse_args()
     
@@ -550,6 +769,8 @@ Examples:
     print(f"Input directory: {args.demux_dir}")
     print(f"Barcode file: {args.barcodes}")
     print(f"Output directory: {report_dir}")
+    if args.anchor_seq:
+        print(f"Anchor sequence: {args.anchor_seq[:50]}{'...' if len(args.anchor_seq) > 50 else ''} ({len(args.anchor_seq)} bp)")
     print(f"{'='*60}\n")
     
     # Load barcodes
@@ -565,7 +786,18 @@ Examples:
         os.path.join(report_dir, 'read_length_distribution.png')
     )
     
-    # 2. MSA layout
+    # 2. Anchor MSA (if anchor sequence provided)
+    anchor_stats = None
+    if args.anchor_seq:
+        print("\n🎯 Generating anchor sequence MSA...")
+        anchor_stats = plot_anchor_msa(
+            args.demux_dir,
+            args.anchor_seq,
+            os.path.join(report_dir, 'anchor_msa.png'),
+            max_reads=args.max_reads
+        )
+    
+    # 3. MSA layout
     plot_msa_layout(
         args.demux_dir,
         barcodes,
@@ -573,21 +805,21 @@ Examples:
         max_reads=args.max_reads
     )
     
-    # 3. Barcode position heatmap
+    # 4. Barcode position heatmap
     plot_barcode_position_heatmap(
         args.demux_dir,
         barcodes,
         os.path.join(report_dir, 'barcode_positions.png')
     )
     
-    # 4. Barcode presence summary
+    # 5. Barcode presence summary
     plot_barcode_presence_summary(
         stats_csv,
         os.path.join(report_dir, 'barcode_summary.png')
     )
     
-    # 5. Generate HTML report
-    html_file = generate_html_report(args.demux_dir, report_dir, stats)
+    # 6. Generate HTML report
+    html_file = generate_html_report(args.demux_dir, report_dir, stats, anchor_stats)
     
     print(f"\n{'='*60}")
     print(f"✅ Report generation complete!")
