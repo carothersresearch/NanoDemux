@@ -402,6 +402,12 @@ def plot_anchor_msa(demux_dir, anchor_seq, output_file, max_reads=100):
         anchor_seq (str): Anchor/reference sequence to align reads to
         output_file (str): Output file path for the plot
         max_reads (int): Maximum number of reads to visualize
+    
+    Returns:
+        dict: Alignment statistics with keys:
+            - num_aligned (int): Number of reads with successful alignments
+            - mean_score (float): Mean alignment score across aligned reads
+            - median_score (float): Median alignment score across aligned reads
     """
     fig, ax = plt.subplots(figsize=(16, 12))
     
@@ -413,7 +419,7 @@ def plot_anchor_msa(demux_dir, anchor_seq, output_file, max_reads=100):
     
     # Count fastq files for efficient division
     fastq_files = [f for f in os.listdir(demux_dir) if f.endswith('_reads.fastq')]
-    reads_per_well = max(1, max_reads // len(fastq_files)) if fastq_files else max_reads
+    reads_per_well = max(1, max_reads // len(fastq_files)) if fastq_files else 0
     
     for fastq_file in sorted(fastq_files):
         well = fastq_file.replace('_reads.fastq', '')
@@ -468,6 +474,7 @@ def plot_anchor_msa(demux_dir, anchor_seq, output_file, max_reads=100):
     y_position = 0
     y_spacing = 1.0
     max_ref_pos = anchor_length
+    num_plotted = 0
     
     for read in all_reads:
         well = read['well']
@@ -490,15 +497,17 @@ def plot_anchor_msa(demux_dir, anchor_seq, output_file, max_reads=100):
             
             # Update max position if needed
             max_ref_pos = max(max_ref_pos, ref_end)
-        
-        y_position += y_spacing
+            
+            # Only increment y_position for plotted reads
+            y_position += y_spacing
+            num_plotted += 1
     
     # Set axis properties
     ax.set_xlim(-10, max_ref_pos + 10)
     ax.set_ylim(-3, y_position + 1)
     ax.set_xlabel('Position on Anchor Sequence (bp)', fontsize=12, fontweight='bold')
     ax.set_ylabel('Reads', fontsize=12, fontweight='bold')
-    ax.set_title(f'Multiple Sequence Alignment to Anchor\n(showing {len(all_reads)} reads aligned to {len(anchor_seq)} bp anchor)', 
+    ax.set_title(f'Multiple Sequence Alignment to Anchor\n(showing {num_plotted} reads aligned to {len(anchor_seq)} bp anchor)', 
                  fontsize=14, fontweight='bold', pad=20)
     
     # Add legend
