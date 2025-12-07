@@ -22,7 +22,11 @@ from demux_barcodes import (
     int_defaultdict,
     merge_dicts,
     merge_reads,
-    get_basename_without_extensions
+    get_basename_without_extensions,
+    find_barcode_candidates,
+    find_barcodes_with_alignment,
+    find_barcodes_two_tier,
+    alignment_score_and_llr
 )
 
 
@@ -65,8 +69,14 @@ class TestBarcodeMatching(unittest.TestCase):
         qual = [40] * len(seq)
         barcode = "ATCGATCGATCGATCG"
         
+        # For testing, use a simple case with no const/var distinction
+        group_seqs = [barcode]
+        const_idx = list(range(len(barcode)))
+        var_idx = []
+        
         result = match_barcode_ends_weighted(
-            seq, qual, barcode, max_penalty=60, flank=50
+            seq, qual, barcode, group_seqs, const_idx, var_idx,
+            max_penalty=60, flank=50
         )
         self.assertTrue(result, "Should find exact match")
 
@@ -76,8 +86,13 @@ class TestBarcodeMatching(unittest.TestCase):
         qual = [40] * len(seq)
         barcode = "TTTTTTTTTTTTTTTT"
         
+        group_seqs = [barcode]
+        const_idx = list(range(len(barcode)))
+        var_idx = []
+        
         result = match_barcode_ends_weighted(
-            seq, qual, barcode, max_penalty=60, flank=50
+            seq, qual, barcode, group_seqs, const_idx, var_idx,
+            max_penalty=60, flank=50
         )
         self.assertFalse(result, "Should not find match with all mismatches")
 
@@ -87,8 +102,13 @@ class TestBarcodeMatching(unittest.TestCase):
         qual = [40] * len(seq)  # High quality = match is worth it
         barcode = "ATCGATCGATCGATCG"
         
+        group_seqs = [barcode]
+        const_idx = list(range(len(barcode)))
+        var_idx = []
+        
         result = match_barcode_ends_weighted(
-            seq, qual, barcode, max_penalty=60, flank=50
+            seq, qual, barcode, group_seqs, const_idx, var_idx,
+            max_penalty=60, flank=50
         )
         self.assertTrue(result, "Should find match despite some quality concerns")
 
@@ -100,9 +120,14 @@ class TestBarcodeMatching(unittest.TestCase):
         qual = [40] * len(seq_rc)
         barcode = "ATCGATCGATCGATCG"
         
+        group_seqs = [barcode]
+        const_idx = list(range(len(barcode)))
+        var_idx = []
+        
         # The barcode appears at the end of the reverse complement
         result = match_barcode_ends_weighted(
-            seq_rc, qual, barcode, max_penalty=60, flank=50
+            seq_rc, qual, barcode, group_seqs, const_idx, var_idx,
+            max_penalty=60, flank=50
         )
         self.assertTrue(result, "Should find barcode in reverse complement")
 
@@ -113,8 +138,13 @@ class TestBarcodeMatching(unittest.TestCase):
         qual = [40] * len(seq)
         barcode = "ATCGATCGATCGATCG"
         
+        group_seqs = [barcode]
+        const_idx = list(range(len(barcode)))
+        var_idx = []
+        
         result = match_barcode_ends_weighted(
-            seq, qual, barcode, max_penalty=60, flank=5
+            seq, qual, barcode, group_seqs, const_idx, var_idx,
+            max_penalty=60, flank=5
         )
         self.assertFalse(result, "Should not find barcode outside flank region")
 
@@ -237,6 +267,100 @@ class TestFASTQHandling(unittest.TestCase):
         qual1 = records[0].letter_annotations["phred_quality"]
         self.assertEqual(len(qual1), 80, "Quality should match sequence length")
         self.assertTrue(all(q > 0 for q in qual1), "All quality scores should be positive")
+
+
+class TestTwoTierMatching(unittest.TestCase):
+    """Test two-tiered barcode matching logic."""
+
+    def test_find_barcode_candidates_unique_match(self):
+        """Test fast candidate filter with unique match."""
+        seq = "ATCGATCGATCGATCG" * 10
+        qual = [40] * len(seq)
+        
+        barcode1 = "ATCGATCGATCGATCG"
+        barcode2 = "GCTAGCTAGCTAGCTA"
+        
+        barcode_map = {barcode1: "A", barcode2: "B"}
+        group_seqs = [barcode1, barcode2]
+        const_idx = list(range(len(barcode1)))
+        var_idx = []
+        
+        candidates = find_barcode_candidates(
+            seq, qual, barcode_map, group_seqs, const_idx, var_idx
+        )
+        
+        self.assertEqual(len(candidates), 1, "Should find one unique candidate")
+        self.assertEqual(candidates[0], "A", "Should identify barcode1 as candidate")
+
+    def test_alignment_score_and_llr(self):
+        """Test alignment scoring function."""
+        seq = "ATCGATCGATCGATCG" * 10
+        barcode = "ATCGATCGATCGATCG"
+        qual = [40] * len(seq)
+        
+        score, llr = alignment_score_and_llr(seq, barcode, qual)
+        
+        self.assertIsNotNone(score, "Should find alignment")
+        self.assertIsNotNone(llr, "Should compute LLR")
+        self.assertGreater(score, 0, "Score should be positive for matching sequence")
+
+    def test_find_barcodes_with_alignment(self):
+        """Test alignment-based barcode finding."""
+        seq = "ATCGATCGATCGATCG" * 10
+        qual = [40] * len(seq)
+        
+        barcode1 = "ATCGATCGATCGATCG"
+        barcode2 = "GCTAGCTAGCTAGCTA"
+        
+        barcode_map = {barcode1: "A", barcode2: "B"}
+        
+        results = find_barcodes_with_alignment(seq, qual, barcode_map)
+        
+        self.assertGreater(len(results), 0, "Should find at least one match")
+        self.assertEqual(results[0][0], "A", "Best match should be barcode1")
+
+    def test_two_tier_fast_path(self):
+        """Test two-tier matching with fast path (unique match)."""
+        seq = "ATCGATCGATCGATCG" * 10
+        qual = [40] * len(seq)
+        
+        barcode1 = "ATCGATCGATCGATCG"
+        barcode2 = "GCTAGCTAGCTAGCTA"
+        
+        barcode_map = {barcode1: "A", barcode2: "B"}
+        group_seqs = [barcode1, barcode2]
+        const_idx = list(range(len(barcode1)))
+        var_idx = []
+        
+        candidates, method = find_barcodes_two_tier(
+            seq, qual, barcode_map, group_seqs, const_idx, var_idx
+        )
+        
+        self.assertEqual(len(candidates), 1, "Should find unique match")
+        self.assertEqual(method, "fast", "Should use fast method")
+        self.assertEqual(candidates[0], "A", "Should identify correct barcode")
+
+    def test_two_tier_fallback_path(self):
+        """Test two-tier matching with fallback alignment."""
+        # Create a sequence with some mismatches that might be ambiguous
+        seq = "ATCGATCGNTCGATCG" * 10  # N = ambiguous base
+        qual = [40] * len(seq)
+        
+        barcode1 = "ATCGATCGATCGATCG"
+        barcode2 = "ATCGATCGCTCGATCG"  # Very similar to barcode1
+        
+        barcode_map = {barcode1: "A", barcode2: "B"}
+        group_seqs = [barcode1, barcode2]
+        const_idx = list(range(len(barcode1)))
+        var_idx = []
+        
+        candidates, method = find_barcodes_two_tier(
+            seq, qual, barcode_map, group_seqs, const_idx, var_idx,
+            use_fallback=True
+        )
+        
+        # Should resolve to at most one candidate (or none if truly ambiguous)
+        self.assertLessEqual(len(candidates), 1, "Should not have multiple candidates after two-tier matching")
 
 
 if __name__ == "__main__":
