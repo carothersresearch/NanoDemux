@@ -641,7 +641,7 @@ def write_barcode_grid_csv(stats, outpath):
 # Process a single FASTQ file
 # ---------------------------------
 
-def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None, var_q=10, use_fallback=True, , generate_report=False):
+def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty, cpus, flank, adapter_file=None, var_q=10, use_fallback=True, generate_report=False):
     """Process a single FASTQ file with improved two-tiered barcode matching."""
     os.makedirs(outdir, exist_ok=True)
     row_map, col_map = load_barcodes(barcode_csv)
