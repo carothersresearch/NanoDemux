@@ -140,6 +140,28 @@ def find_barcode_candidates(seq, qual, barcode_map, group_seqs, const_idx, var_i
     return candidates
 
 # ---------------------------------
+# Constants for alignment scoring
+# ---------------------------------
+
+# Parasail alignment matrix (match=2, mismatch=-1)
+# Cached to avoid recreating on every alignment call
+_ALIGNMENT_MATRIX = None
+
+def _get_alignment_matrix():
+    """Get or create the cached alignment matrix."""
+    global _ALIGNMENT_MATRIX
+    if _ALIGNMENT_MATRIX is None:
+        _ALIGNMENT_MATRIX = parasail.matrix_create("ACGT", 2, -1)
+    return _ALIGNMENT_MATRIX
+
+# LLR calculation constants
+RANDOM_BASE_PROBABILITY = 0.25  # Probability of random base match (1/4 bases)
+MATCH_SCORE = 2  # Match score used in alignment
+
+# Alignment uniqueness threshold
+MIN_SCORE_DIFFERENCE = 5  # Minimum score difference for unique alignment
+
+# ---------------------------------
 # Fallback alignment (Method 2)
 # ---------------------------------
 
@@ -163,9 +185,9 @@ def alignment_score_and_llr(seq, barcode_seq, qual, flank=100):
     best_score = -float('inf')
     best_llr = -float('inf')
     
-    # Use Smith-Waterman local alignment
+    # Use Smith-Waterman local alignment with cached matrix
     # Match=2, Mismatch=-1, Gap open=2, Gap extend=1 (typical nanopore-friendly scoring)
-    matrix = parasail.matrix_create("ACGT", 2, -1)
+    matrix = _get_alignment_matrix()
     
     for end_seq in ends:
         if len(end_seq) < k:
@@ -181,7 +203,7 @@ def alignment_score_and_llr(seq, barcode_seq, qual, flank=100):
             # LLR = log(P(alignment|correct) / P(alignment|incorrect))
             # Simplified: use alignment score normalized by barcode length
             # and penalized by expected random match
-            expected_random_score = k * 0.25 * 2  # 0.25 prob * match score * length
+            expected_random_score = k * RANDOM_BASE_PROBABILITY * MATCH_SCORE
             best_llr = (result.score - expected_random_score) / k
     
     return (best_score, best_llr) if best_score > 0 else (None, None)
@@ -266,7 +288,7 @@ def find_barcodes_two_tier(seq, qual, barcode_map, group_seqs, const_idx, var_id
             else:
                 # Check if best is significantly better than second
                 score_diff = best_match[1] - alignment_results[1][1]
-                if score_diff > 5:  # Require >5 point score difference for uniqueness
+                if score_diff > MIN_SCORE_DIFFERENCE:  # Require significant score difference for uniqueness
                     return [best_match[0]], 'alignment'
         
         # Alignment didn't help disambiguate

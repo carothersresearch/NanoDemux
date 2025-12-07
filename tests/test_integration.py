@@ -15,7 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from demux_barcodes import main, load_barcodes, process_chunk
+from demux_barcodes import main, load_barcodes, process_chunk, analyze_barcode_set
 
 
 class TestDemultiplexingPipeline(unittest.TestCase):
@@ -160,6 +160,9 @@ class TestProcessChunk(unittest.TestCase):
         self.barcode_csv = os.path.join(self.temp_dir, "test_barcodes.csv")
         self._create_barcode_csv()
         self.row_map, self.col_map = load_barcodes(self.barcode_csv)
+        # Analyze barcode sets for the new API
+        self.row_meta = analyze_barcode_set(list(self.row_map.keys()))
+        self.col_meta = analyze_barcode_set(list(self.col_map.keys()))
 
     def tearDown(self):
         """Clean up temporary files."""
@@ -180,8 +183,8 @@ class TestProcessChunk(unittest.TestCase):
         rec.letter_annotations["phred_quality"] = [40] * 200
         records = [rec]
         
-        # Args: (chunk, row_map, col_map, min_length, max_penalty, flank, adapters)
-        args = (records, self.row_map, self.col_map, 50, 60, 100, [])
+        # Args: (chunk, row_map, col_map, row_meta, col_meta, min_length, max_penalty, flank, adapters, var_q, use_fallback)
+        args = (records, self.row_map, self.col_map, self.row_meta, self.col_meta, 50, 60, 100, [], 10, True)
         stats, reads = process_chunk(args)
         
         self.assertIsInstance(stats, dict, "Stats should be a dict")
@@ -195,8 +198,8 @@ class TestProcessChunk(unittest.TestCase):
             rec.letter_annotations["phred_quality"] = [40] * 200
             records.append(rec)
         
-        # Args: (chunk, row_map, col_map, min_length, max_penalty, flank, adapters)
-        args = (records, self.row_map, self.col_map, 50, 60, 100, [])
+        # Args: (chunk, row_map, col_map, row_meta, col_meta, min_length, max_penalty, flank, adapters, var_q, use_fallback)
+        args = (records, self.row_map, self.col_map, self.row_meta, self.col_meta, 50, 60, 100, [], 10, True)
         stats, reads = process_chunk(args)
         
         self.assertEqual(stats['GLOBAL']['total'], 2, "Should count 2 reads")
