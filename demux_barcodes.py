@@ -16,6 +16,7 @@ import os
 from multiprocessing import Pool
 import glob
 import sys
+import subprocess
 
 
 import itertools
@@ -649,7 +650,6 @@ def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty
     if generate_raw_report:
         try:
             print(f"📊 Generating raw data quality report...")
-            import subprocess
             script_dir = os.path.dirname(os.path.abspath(__file__))
             raw_report_script = os.path.join(script_dir, 'generate_raw_quality_report.py')
             raw_report_dir = os.path.join(outdir, 'raw_quality_report')
@@ -702,7 +702,6 @@ def process_single_file(fastq_file, barcode_csv, outdir, min_length, max_penalty
     if generate_report:
         try:
             print(f"📊 Generating quality report...")
-            import subprocess
             # Use sys.executable for portability and construct path relative to current script
             script_dir = os.path.dirname(os.path.abspath(__file__))
             report_script = os.path.join(script_dir, 'generate_quality_report.py')

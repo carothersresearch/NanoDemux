@@ -14,7 +14,6 @@ import os
 import sys
 from collections import defaultdict, Counter
 from Bio import SeqIO
-import pandas as pd
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
