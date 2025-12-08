@@ -28,11 +28,11 @@ jobs:
     
     - name: Run tests
       run: |
-        python run_tests.py --verbose
+        python nanodemux_scripts/run_tests.py --verbose
     
     - name: Generate coverage report
       run: |
-        python run_tests.py --cov
+        python nanodemux_scripts/run_tests.py --cov
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -87,7 +87,7 @@ jobs:
     - name: Compare with previous results
       if: success()
       run: |
-        python benchmark_demux.py --compare 5
+        python nanodemux_scripts/benchmark_demux.py --compare 5
     
     - name: Upload benchmark results
       uses: actions/upload-artifact@v4

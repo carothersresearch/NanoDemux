@@ -114,7 +114,7 @@ class DemuxBenchmark:
         """
         # Build command
         cmd = [
-            sys.executable, "demux_barcodes.py",
+            sys.executable, os.path.join(os.path.dirname(__file__), "demux_barcodes.py"),
             fastq_file, barcode_csv,
             "--outdir", outdir
         ]

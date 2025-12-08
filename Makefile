@@ -23,48 +23,48 @@ install:
 	pip install -r requirements.txt
 
 test:
-	python run_tests.py
+	python nanodemux_scripts/run_tests.py
 
 test-fast:
 	python -m pytest tests/ -q
 
 test-verbose:
-	python run_tests.py --verbose
+	python nanodemux_scripts/run_tests.py --verbose
 
 test-cov:
-	python run_tests.py --cov
+	python nanodemux_scripts/run_tests.py --cov
 	@echo ""
 	@echo "Coverage report generated in htmlcov/index.html"
 
 test-unittest:
-	python run_tests.py --unittest
+	python nanodemux_scripts/run_tests.py --unittest
 
 test-pytest:
-	python run_tests.py --pytest
+	python nanodemux_scripts/run_tests.py --pytest
 
 lint:
-	python -m flake8 demux_barcodes.py tests/ --max-line-length=100 || true
-	python -m pylint demux_barcodes.py --disable=all --enable=E,F || true
+	python -m flake8 nanodemux_scripts/demux_barcodes.py tests/ --max-line-length=100 || true
+	python -m pylint nanodemux_scripts/demux_barcodes.py --disable=all --enable=E,F || true
 
 benchmark:
-	python benchmark_demux.py
+	python nanodemux_scripts/benchmark_demux.py
 
 benchmark-fast:
-	python benchmark_demux.py --subset 100
+	python nanodemux_scripts/benchmark_demux.py --subset 100
 
 benchmark-full:
-	python benchmark_demux.py --full
+	python nanodemux_scripts/benchmark_demux.py --full
 
 benchmark-compare:
-	python benchmark_demux.py --compare 5
+	python nanodemux_scripts/benchmark_demux.py --compare 5
 
 report:
 	@echo "Generating quality report for example demux output..."
 	@if [ -d "demplex_data/55XPXK_1_P4_323_EG" ]; then \
-		python generate_quality_report.py demplex_data/55XPXK_1_P4_323_EG/ barcodes/251202_primer_well_map_DA.csv; \
+		python nanodemux_scripts/generate_quality_report.py demplex_data/55XPXK_1_P4_323_EG/ barcodes/251202_primer_well_map_DA.csv; \
 	else \
 		echo "Error: Example demux output not found. Run demultiplexing first:"; \
-		echo "  python demux_barcodes.py raw_data/55XPXK_1_P4_323_EG.fastq barcodes/251202_primer_well_map_DA.csv --cpus 2"; \
+		echo "  python nanodemux_scripts/demux_barcodes.py raw_data/55XPXK_1_P4_323_EG.fastq barcodes/251202_primer_well_map_DA.csv --cpus 2"; \
 	fi
 
 clean:

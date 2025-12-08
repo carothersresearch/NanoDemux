@@ -9,6 +9,7 @@ import pandas as pd
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "nanodemux_scripts"))
 
 from demux_barcodes import main, load_barcodes
 
