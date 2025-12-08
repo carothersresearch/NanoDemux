@@ -34,6 +34,65 @@ ALIGNMENT_GAP_OPEN = 2
 ALIGNMENT_GAP_EXTEND = 1
 
 
+def load_anchor_sequence(anchor_input):
+    """
+    Load anchor sequence from either a string or a file.
+    
+    Parameters:
+        anchor_input (str): Either a sequence string or a file path
+    
+    Returns:
+        str: The anchor sequence (uppercase, stripped of whitespace)
+    
+    The function tries to detect if the input is a file path by:
+    1. Checking if it's a valid file path
+    2. If it is a file, reads the sequence from it (supports FASTA or plain text)
+    3. If not a file, treats it as a sequence string
+    """
+    if not anchor_input:
+        return None
+    
+    # Check if input is a file path
+    if os.path.isfile(anchor_input):
+        print(f"Reading anchor sequence from file: {anchor_input}")
+        
+        # Try to read as FASTA first
+        try:
+            with open(anchor_input, 'r') as f:
+                records = list(SeqIO.parse(f, "fasta"))
+                if records:
+                    # Use the first sequence in the FASTA file
+                    sequence = str(records[0].seq).upper().strip()
+                    print(f"  Loaded anchor sequence from FASTA ({len(sequence)} bp)")
+                    return sequence
+        except Exception:
+            # Not a valid FASTA file, try reading as plain text
+            pass
+        
+        # Read as plain text file
+        try:
+            with open(anchor_input, 'r') as f:
+                sequence = ""
+                for line in f:
+                    # Skip comment lines and empty lines
+                    line = line.strip()
+                    if line and not line.startswith('#') and not line.startswith('>'):
+                        sequence += line
+                sequence = sequence.upper().strip()
+                if sequence:
+                    print(f"  Loaded anchor sequence from text file ({len(sequence)} bp)")
+                    return sequence
+                else:
+                    print(f"  Warning: File is empty or contains no sequence data")
+                    return None
+        except Exception as e:
+            print(f"  Error reading file: {e}")
+            return None
+    else:
+        # Treat as sequence string
+        return anchor_input.upper().strip()
+
+
 def load_barcode_map(barcode_csv):
     """Load barcode sequences from CSV file."""
     df = pd.read_csv(barcode_csv)
@@ -744,6 +803,11 @@ Examples:
   python generate_quality_report.py demplex_data/55XPXK_1_P4_323_EG/ \\
       barcodes/251202_primer_well_map_DA.csv \\
       --anchor-seq AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC
+  
+  # Generate report with anchor sequence from file
+  python generate_quality_report.py demplex_data/55XPXK_1_P4_323_EG/ \\
+      barcodes/251202_primer_well_map_DA.csv \\
+      --anchor-seq anchor_sequence.fasta
         """
     )
     
@@ -754,7 +818,7 @@ Examples:
     parser.add_argument('--max-reads', type=int, default=100,
                        help='Maximum number of reads to show in MSA layout (default: 100)')
     parser.add_argument('--anchor-seq', default=None,
-                       help='Anchor/reference sequence for MSA alignment (optional)')
+                       help='Anchor/reference sequence for MSA alignment. Can be either a sequence string or a file path (FASTA or plain text) (optional)')
     
     args = parser.parse_args()
     
@@ -786,8 +850,11 @@ Examples:
     print(f"Input directory: {args.demux_dir}")
     print(f"Barcode file: {args.barcodes}")
     print(f"Output directory: {report_dir}")
-    if args.anchor_seq:
-        print(f"Anchor sequence: {args.anchor_seq[:50]}{'...' if len(args.anchor_seq) > 50 else ''} ({len(args.anchor_seq)} bp)")
+    
+    # Load anchor sequence from file or string
+    anchor_seq = load_anchor_sequence(args.anchor_seq)
+    if anchor_seq:
+        print(f"Anchor sequence: {anchor_seq[:50]}{'...' if len(anchor_seq) > 50 else ''} ({len(anchor_seq)} bp)")
     print(f"{'='*60}\n")
     
     # Load barcodes
@@ -805,11 +872,11 @@ Examples:
     
     # 2. Anchor MSA (if anchor sequence provided)
     anchor_stats = None
-    if args.anchor_seq:
+    if anchor_seq:
         print("\n🎯 Generating anchor sequence MSA...")
         anchor_stats = plot_anchor_msa(
             args.demux_dir,
-            args.anchor_seq,
+            anchor_seq,
             os.path.join(report_dir, 'anchor_msa.png'),
             max_reads=args.max_reads
         )
