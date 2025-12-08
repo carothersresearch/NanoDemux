@@ -98,6 +98,11 @@ def align_sequences_pairwise(sequences, qualities):
     Align sequences using parasail Smith-Waterman alignment.
     Returns aligned sequences and qualities.
     
+    Note: This performs pairwise alignment of each sequence to the first (reference) 
+    sequence. The reference sequence itself is not re-aligned, so sequences may have
+    different lengths. The consensus calculation handles this by padding sequences
+    to the maximum length.
+    
     Parameters:
         sequences: list of sequence strings
         qualities: list of quality score lists
@@ -112,7 +117,7 @@ def align_sequences_pairwise(sequences, qualities):
     if len(sequences) == 1:
         return sequences, qualities
     
-    # Use first sequence as reference
+    # Use first sequence as reference (not modified during alignment)
     ref_seq = sequences[0]
     ref_qual = qualities[0]
     
