@@ -17,6 +17,7 @@ In pooled nanopore sequencing experiments, multiple samples are combined and seq
 
 ## Key Features
 
+- **Comprehensive Workflow**: Single command to run complete analysis pipeline with automated HTML reports
 - **Dual-indexing support**: Matches both row (A-H) and column (1-12) barcodes for 96-well plate demultiplexing
 - **Quality-aware matching**: Uses Phred quality scores to tolerate sequencing errors intelligently
 - **Sequence alignment**: Performs MSA and generates quality-weighted consensus sequences for each well
@@ -24,6 +25,7 @@ In pooled nanopore sequencing experiments, multiple samples are combined and seq
 - **Multiprocessing**: Parallel processing for faster analysis of large datasets
 - **Comprehensive statistics**: Generates detailed mapping statistics and barcode match counts
 - **Flexible parameters**: Configurable mismatch tolerance, search regions, and minimum read length
+- **Quality reports**: Graphical reports for raw and demultiplexed data with MSA visualization
 
 ## Installation
 
@@ -31,7 +33,10 @@ In pooled nanopore sequencing experiments, multiple samples are combined and seq
 
 ```
 NanoDemux/
+├── nanodemux                   # 🌟 Comprehensive workflow script (runs all steps)
 ├── demux_barcodes.py          # Main demultiplexing script (supports single or multi-file)
+├── generate_raw_quality_report.py  # Raw data quality analysis
+├── generate_quality_report.py      # Demultiplexed data quality reports
 ├── align_wells.py             # Sequence alignment and consensus generation for wells
 ├── benchmark_demux.py         # Benchmarking suite
 ├── run_tests.py               # Test runner
@@ -62,7 +67,7 @@ NanoDemux/
 │           ├── A1_reads.fastq
 │           └── barcode_stats.csv
 ├── tests/                     # Comprehensive testing suite
-│   ├── test_*.py              # 30 test cases
+│   ├── test_*.py              # 30+ test cases
 │   └── *.md                   # Testing documentation
 ├── .github/workflows/         # CI/CD pipeline
 └── DOCKER.md                  # Docker instructions
@@ -152,7 +157,54 @@ pip install biopython pandas
 
 ## Usage
 
-### Basic Commands
+### Comprehensive Workflow Script (Recommended)
+
+The `nanodemux` script provides a complete end-to-end workflow that runs all analysis steps and generates a comprehensive HTML report:
+
+```bash
+# Basic usage - runs full workflow with default parameters
+python nanodemux <input.fastq> <barcodes.csv>
+
+# Custom output directory with more CPUs
+python nanodemux raw_data/reads.fastq barcodes/primer_well_map.csv \
+    --output results/ --cpus 4
+
+# With all custom parameters
+python nanodemux raw_data/reads.fastq barcodes/primer_well_map.csv \
+    --output results/ --cpus 4 --flank 150 --max-penalty 80 \
+    --anchor-seq AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC \
+    --min-quality 25
+```
+
+**The workflow automatically:**
+1. Generates raw quality report (pre-demultiplexing analysis)
+2. Demultiplexes reads by barcodes into wells
+3. Generates quality report on demultiplexed data with MSA visualization
+4. Performs sequence alignment and generates consensus sequences for each well
+5. Creates a comprehensive HTML report combining all results
+
+**Output Structure:**
+```
+output/
+├── 1_raw_quality_report/          # Raw data quality analysis
+├── 2_demultiplexed/                # Demultiplexed FASTQ files by well
+├── 3_demux_quality_report/         # Quality report on demuxed data
+├── 4_aligned/                      # Aligned sequences and consensus
+└── comprehensive_report.html       # Summary of all results
+```
+
+**Skip Steps:**
+```bash
+# Skip raw QC and alignment steps
+python nanodemux input.fastq barcodes.csv \
+    --skip-raw-qc --skip-alignment
+```
+
+See `python nanodemux --help` for all available parameters from each workflow step.
+
+### Individual Script Usage
+
+You can also run each step independently:
 
 **Single File Processing:**
 ```bash
