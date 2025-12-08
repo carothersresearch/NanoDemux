@@ -171,6 +171,53 @@ Stats,total,length_ok,mapped,single,adapter_only,no_match,too_short,ambiguous_mu
             self.assertIn('TOTAL READS', content)
             self.assertIn('10', content)
 
+    def test_anchor_msa(self):
+        """Test anchor sequence MSA visualization."""
+        barcodes = generate_quality_report.load_barcode_map(self.barcode_csv)
+        output_file = os.path.join(self.temp_dir, "test_anchor_msa.png")
+        
+        # Use a test anchor sequence
+        anchor_seq = "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC"
+        
+        anchor_stats = generate_quality_report.plot_anchor_msa(
+            self.demux_dir, anchor_seq, output_file, max_reads=10
+        )
+        
+        self.assertTrue(os.path.exists(output_file))
+        self.assertIn('num_aligned', anchor_stats)
+        self.assertIn('mean_score', anchor_stats)
+        self.assertIn('median_score', anchor_stats)
+
+    def test_html_report_with_anchor(self):
+        """Test HTML report generation with anchor statistics."""
+        report_dir = os.path.join(self.temp_dir, "report_anchor")
+        os.makedirs(report_dir)
+        stats = {
+            'total_reads': 10,
+            'mean_length': 200,
+            'median_length': 180,
+            'min_length': 100,
+            'max_length': 300,
+            'std_length': 50
+        }
+        anchor_stats = {
+            'num_aligned': 8,
+            'mean_score': 75.5,
+            'median_score': 78.0
+        }
+        html_file = generate_quality_report.generate_html_report(
+            self.demux_dir, report_dir, stats, anchor_stats
+        )
+        self.assertTrue(os.path.exists(html_file))
+        
+        # Check HTML content includes anchor section
+        with open(html_file, 'r') as f:
+            content = f.read()
+            self.assertIn('Anchor Sequence Alignment', content)
+            self.assertIn('ALIGNED READS', content)
+            self.assertIn('8', content)
+            self.assertIn('75.5', content)
+
 
 if __name__ == '__main__':
     unittest.main()

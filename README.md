@@ -214,6 +214,7 @@ Example:
 | `--adapters` | `None` | Optional Python file defining ADAPTERS list for adapter detection |
 | `--report` | `False` | Generate graphical quality report with MSA, read lengths, and barcode analysis |
 | `--raw-report` | `False` | Generate graphical quality report for raw (unmultiplexed) data |
+| `--anchor-seq` | `None` | Optional anchor/reference sequence for MSA alignment in quality report |
 
 ## Graphical Quality Reports
 
@@ -247,6 +248,7 @@ python generate_raw_quality_report.py raw_data/large_sample.fastq --max-reads 10
 
 Analyze demultiplexed data after barcode matching:
 - **Multiple Sequence Alignment (MSA) Layout**: Visualization of read positions and lengths, similar to [SeqAn ReadLayout](https://seqan.readthedocs.io/en/seqan-v1.4.2/Tutorial/FragmentStore.html), with barcode positions highlighted
+- **Anchor Sequence MSA** (optional): Align all reads to a reference/anchor sequence using Smith-Waterman alignment. Perfect for analyzing how reads align to a known template or reference sequence.
 - **Read Length Distribution**: Histograms and box plots showing read length statistics across all wells
 - **Barcode Position Analysis**: Heatmaps showing where row and column barcodes are detected within reads
 - **Barcode Presence Summary**: 96-well plate heatmap with read distribution statistics
@@ -257,8 +259,17 @@ Analyze demultiplexed data after barcode matching:
 # Automatically generate report during demultiplexing
 python demux_barcodes.py raw_data/reads.fastq barcodes/primer_well_map.csv --report
 
+# Generate report with anchor sequence MSA during demultiplexing
+python demux_barcodes.py raw_data/reads.fastq barcodes/primer_well_map.csv \
+    --report --anchor-seq AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC
+
 # Or generate report separately from existing demux output
 python generate_quality_report.py demplex_data/55XPXK_1_P4_323_EG/ barcodes/primer_well_map.csv
+
+# Generate report with anchor sequence MSA
+python generate_quality_report.py demplex_data/55XPXK_1_P4_323_EG/ \
+    barcodes/primer_well_map.csv \
+    --anchor-seq AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC
 ```
 
 Reports are saved as HTML files with embedded visualizations:
