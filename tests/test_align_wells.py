@@ -15,6 +15,7 @@ import pandas as pd
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "nanodemux_scripts"))
 
 from align_wells import (
     calculate_quality_weighted_consensus,

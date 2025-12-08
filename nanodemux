@@ -384,7 +384,7 @@ The script will create the following structure in the output directory:
     if not args.skip_raw_qc:
         cmd = [
             sys.executable,
-            os.path.join(script_dir, "generate_raw_quality_report.py"),
+            os.path.join(script_dir, "nanodemux_scripts", "generate_raw_quality_report.py"),
             args.fastq,
             "--output", raw_report_dir
         ]
@@ -398,7 +398,7 @@ The script will create the following structure in the output directory:
     # Step 2: Demultiplex
     cmd = [
         sys.executable,
-        os.path.join(script_dir, "demux_barcodes.py"),
+        os.path.join(script_dir, "nanodemux_scripts", "demux_barcodes.py"),
         args.fastq,
         args.barcodes,
         "--outdir", demux_dir,
@@ -421,7 +421,7 @@ The script will create the following structure in the output directory:
     if not args.skip_demux_qc:
         cmd = [
             sys.executable,
-            os.path.join(script_dir, "generate_quality_report.py"),
+            os.path.join(script_dir, "nanodemux_scripts", "generate_quality_report.py"),
             demux_dir,
             args.barcodes,
             "--output", demux_report_dir
@@ -441,7 +441,7 @@ The script will create the following structure in the output directory:
     if not args.skip_alignment:
         cmd = [
             sys.executable,
-            os.path.join(script_dir, "align_wells.py"),
+            os.path.join(script_dir, "nanodemux_scripts", "align_wells.py"),
             demux_dir,
             align_dir,
             "--min-quality", str(args.min_quality)

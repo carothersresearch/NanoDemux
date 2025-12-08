@@ -129,7 +129,7 @@ Edit `.github/workflows/tests.yml`:
 ```yaml
 - name: Run benchmarks
   run: |
-    python benchmark_demux.py --subset 500  # Increase to 500 reads
+    python nanodemux_scripts/benchmark_demux.py --subset 500  # Increase to 500 reads
 ```
 
 ### Add Custom Parameters
@@ -137,7 +137,7 @@ Edit `.github/workflows/tests.yml`:
 ```yaml
 - name: Run benchmarks
   run: |
-    python benchmark_demux.py --subset 100 --flank 150 --max-penalty 80
+    python nanodemux_scripts/benchmark_demux.py --subset 100 --flank 150 --max-penalty 80
 ```
 
 ### Change Python Version

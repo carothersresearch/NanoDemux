@@ -34,12 +34,13 @@ In pooled nanopore sequencing experiments, multiple samples are combined and seq
 ```
 NanoDemux/
 ├── nanodemux                   # 🌟 Comprehensive workflow script (runs all steps)
-├── demux_barcodes.py          # Main demultiplexing script (supports single or multi-file)
-├── generate_raw_quality_report.py  # Raw data quality analysis
-├── generate_quality_report.py      # Demultiplexed data quality reports
-├── align_wells.py             # Sequence alignment and consensus generation for wells
-├── benchmark_demux.py         # Benchmarking suite
-├── run_tests.py               # Test runner
+├── nanodemux_scripts/          # Individual utility scripts
+│   ├── demux_barcodes.py          # Main demultiplexing script (supports single or multi-file)
+│   ├── generate_raw_quality_report.py  # Raw data quality analysis
+│   ├── generate_quality_report.py      # Demultiplexed data quality reports
+│   ├── align_wells.py             # Sequence alignment and consensus generation for wells
+│   ├── benchmark_demux.py         # Benchmarking suite
+│   └── run_tests.py               # Test runner
 ├── Makefile                   # Build automation and test targets
 ├── requirements.txt           # Python dependencies
 ├── primer_well_map.csv        # Example barcode definitions
@@ -208,29 +209,29 @@ You can also run each step independently:
 
 **Single File Processing:**
 ```bash
-python demux_barcodes.py <input.fastq> <barcodes.csv>
+python nanodemux_scripts/demux_barcodes.py <input.fastq> <barcodes.csv>
 ```
 
 **Multiple File Processing (Directory):**
 ```bash
-python demux_barcodes.py <input_directory> <barcodes.csv>
+python nanodemux_scripts/demux_barcodes.py <input_directory> <barcodes.csv>
 ```
 
 ### Examples
 
 ```bash
 # Single file - using example barcodes and optional adapters
-python demux_barcodes.py raw_data/55XPXK_1_P4_323_EG.fastq \
+python nanodemux_scripts/demux_barcodes.py raw_data/55XPXK_1_P4_323_EG.fastq \
     barcodes/251202_primer_well_map_DA.csv \
     --adapters barcodes/251205_adapters_DA.py \
     --cpus 4 --flank 100
 
 # Single file - with custom output directory
-python demux_barcodes.py raw_data/your_data.fastq barcodes/your_barcode_map.csv \
+python nanodemux_scripts/demux_barcodes.py raw_data/your_data.fastq barcodes/your_barcode_map.csv \
     --outdir custom_output/ --cpus 4
 
 # Process all FASTQ files in a directory
-python demux_barcodes.py raw_data/experiment1/ barcodes/251202_primer_well_map_DA.csv \
+python nanodemux_scripts/demux_barcodes.py raw_data/experiment1/ barcodes/251202_primer_well_map_DA.csv \
     --adapters barcodes/251205_adapters_DA.py --cpus 4
 ```
 
@@ -286,16 +287,16 @@ Analyze unmultiplexed FASTQ files before demultiplexing to assess overall data q
 
 ```bash
 # Automatically generate raw report before demultiplexing
-python demux_barcodes.py raw_data/reads.fastq barcodes/primer_well_map.csv --raw-report
+python nanodemux_scripts/demux_barcodes.py raw_data/reads.fastq barcodes/primer_well_map.csv --raw-report
 
 # Or generate raw report separately
-python generate_raw_quality_report.py raw_data/reads.fastq
+python nanodemux_scripts/generate_raw_quality_report.py raw_data/reads.fastq
 
 # Generate raw report with custom output directory
-python generate_raw_quality_report.py raw_data/reads.fastq --output reports/raw_qc/
+python nanodemux_scripts/generate_raw_quality_report.py raw_data/reads.fastq --output reports/raw_qc/
 
 # Analyze only first 10000 reads for faster processing
-python generate_raw_quality_report.py raw_data/large_sample.fastq --max-reads 10000
+python nanodemux_scripts/generate_raw_quality_report.py raw_data/large_sample.fastq --max-reads 10000
 ```
 
 ### 2. Demultiplexed Data Quality Reports
@@ -311,17 +312,17 @@ Analyze demultiplexed data after barcode matching:
 
 ```bash
 # Automatically generate report during demultiplexing
-python demux_barcodes.py raw_data/reads.fastq barcodes/primer_well_map.csv --report
+python nanodemux_scripts/demux_barcodes.py raw_data/reads.fastq barcodes/primer_well_map.csv --report
 
 # Generate report with anchor sequence MSA during demultiplexing
-python demux_barcodes.py raw_data/reads.fastq barcodes/primer_well_map.csv \
+python nanodemux_scripts/demux_barcodes.py raw_data/reads.fastq barcodes/primer_well_map.csv \
     --report --anchor-seq AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC
 
 # Or generate report separately from existing demux output
-python generate_quality_report.py demplex_data/55XPXK_1_P4_323_EG/ barcodes/primer_well_map.csv
+python nanodemux_scripts/generate_quality_report.py demplex_data/55XPXK_1_P4_323_EG/ barcodes/primer_well_map.csv
 
 # Generate report with anchor sequence MSA
-python generate_quality_report.py demplex_data/55XPXK_1_P4_323_EG/ \
+python nanodemux_scripts/generate_quality_report.py demplex_data/55XPXK_1_P4_323_EG/ \
     barcodes/primer_well_map.csv \
     --anchor-seq AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC
 ```
@@ -332,7 +333,7 @@ Reports are saved as HTML files with embedded visualizations:
 
 ## Sequence Alignment and Consensus Generation
 
-After demultiplexing, you can perform multiple sequence alignment (MSA) and generate quality-weighted consensus sequences for each well using the `align_wells.py` script.
+After demultiplexing, you can perform multiple sequence alignment (MSA) and generate quality-weighted consensus sequences for each well using the `nanodemux_scripts/align_wells.py` script.
 
 ### Features
 
@@ -345,16 +346,16 @@ After demultiplexing, you can perform multiple sequence alignment (MSA) and gene
 
 ```bash
 # Basic usage - align all reads in each well
-python align_wells.py demplex_data/55XPXK_1_P4_323_EG/ aligned_output/
+python nanodemux_scripts/align_wells.py demplex_data/55XPXK_1_P4_323_EG/ aligned_output/
 
 # Limit reads per well for faster processing
-python align_wells.py demplex_data/experiment/ aligned_output/ --max-reads 100
+python nanodemux_scripts/align_wells.py demplex_data/experiment/ aligned_output/ --max-reads 100
 
 # Skip MSA and calculate consensus from unaligned sequences
-python align_wells.py demux_dir/ output_dir/ --no-align
+python nanodemux_scripts/align_wells.py demux_dir/ output_dir/ --no-align
 
 # Custom CSV output location
-python align_wells.py demux_dir/ output_dir/ --csv consensus_summary.csv
+python nanodemux_scripts/align_wells.py demux_dir/ output_dir/ --csv consensus_summary.csv
 ```
 
 ### Command-line Options
@@ -387,10 +388,10 @@ python align_wells.py demux_dir/ output_dir/ --csv consensus_summary.csv
 
 ```bash
 # 1. Demultiplex reads
-python demux_barcodes.py raw_data/experiment.fastq barcodes/primer_map.csv --cpus 4
+python nanodemux_scripts/demux_barcodes.py raw_data/experiment.fastq barcodes/primer_map.csv --cpus 4
 
 # 2. Generate consensus sequences for each well
-python align_wells.py demplex_data/experiment/ aligned_wells/ --max-reads 500
+python nanodemux_scripts/align_wells.py demplex_data/experiment/ aligned_wells/ --max-reads 500
 
 # 3. View results
 cat aligned_wells/consensus_sequences.csv
@@ -502,7 +503,7 @@ This approach is more robust than simple edit distance for noisy nanopore data.
 ```bash
 # 1. Prepare your barcode mapping file (primer_well_map.csv)
 # 2. Run demultiplexing on a single FASTQ file with 4 CPU cores
-python demux_barcodes.py raw_data/my_reads.fastq barcodes/primer_well_map.csv \
+python nanodemux_scripts/demux_barcodes.py raw_data/my_reads.fastq barcodes/primer_well_map.csv \
     --cpus 4 \
     --max_penalty 60 \
     --min_length 50
@@ -522,7 +523,7 @@ mkdir -p raw_data/experiment1
 mv *.fastq raw_data/experiment1/
 
 # 2. Run demultiplexing on all files in the directory
-python demux_barcodes.py raw_data/experiment1/ barcodes/primer_well_map.csv \
+python nanodemux_scripts/demux_barcodes.py raw_data/experiment1/ barcodes/primer_well_map.csv \
     --cpus 4 \
     --max_penalty 60
 

@@ -11,7 +11,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r requirements.txt
 
 # Copy the application code
-COPY demux_barcodes.py .
+COPY nanodemux_scripts/demux_barcodes.py .
 
 # Create output directory
 RUN mkdir -p /data/output
