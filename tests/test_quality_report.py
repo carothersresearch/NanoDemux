@@ -219,6 +219,83 @@ Stats,total,length_ok,mapped,single,adapter_only,no_match,too_short,ambiguous_mu
             self.assertIn('8', content)
             self.assertIn('75.5', content)
 
+    def test_load_anchor_sequence_from_string(self):
+        """Test loading anchor sequence from a string."""
+        anchor_seq = "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC"
+        result = generate_quality_report.load_anchor_sequence(anchor_seq)
+        self.assertEqual(result, anchor_seq)
+    
+    def test_load_anchor_sequence_from_fasta(self):
+        """Test loading anchor sequence from a FASTA file."""
+        # Create a FASTA file
+        fasta_file = os.path.join(self.temp_dir, "anchor.fasta")
+        test_seq = "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC"
+        with open(fasta_file, 'w') as f:
+            f.write(">anchor_sequence\n")
+            f.write(f"{test_seq}\n")
+        
+        result = generate_quality_report.load_anchor_sequence(fasta_file)
+        self.assertEqual(result, test_seq)
+    
+    def test_load_anchor_sequence_from_text_file(self):
+        """Test loading anchor sequence from a plain text file."""
+        # Create a plain text file
+        text_file = os.path.join(self.temp_dir, "anchor.txt")
+        test_seq = "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC"
+        with open(text_file, 'w') as f:
+            f.write(f"{test_seq}\n")
+        
+        result = generate_quality_report.load_anchor_sequence(text_file)
+        self.assertEqual(result, test_seq)
+    
+    def test_load_anchor_sequence_from_multiline_text(self):
+        """Test loading anchor sequence from a multi-line text file."""
+        text_file = os.path.join(self.temp_dir, "anchor_multiline.txt")
+        seq_part1 = "AATGATACGGCGACCACCGAGATCTACAC"
+        seq_part2 = "TATAGCCTTCGTCGGCAGCGTC"
+        with open(text_file, 'w') as f:
+            f.write(f"{seq_part1}\n")
+            f.write(f"{seq_part2}\n")
+        
+        result = generate_quality_report.load_anchor_sequence(text_file)
+        self.assertEqual(result, seq_part1 + seq_part2)
+    
+    def test_load_anchor_sequence_with_comments(self):
+        """Test loading anchor sequence from text file with comments."""
+        text_file = os.path.join(self.temp_dir, "anchor_comments.txt")
+        test_seq = "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC"
+        with open(text_file, 'w') as f:
+            f.write("# This is a comment\n")
+            f.write(f"{test_seq}\n")
+            f.write("# Another comment\n")
+        
+        result = generate_quality_report.load_anchor_sequence(text_file)
+        self.assertEqual(result, test_seq)
+    
+    def test_load_anchor_sequence_none(self):
+        """Test loading anchor sequence with None input."""
+        result = generate_quality_report.load_anchor_sequence(None)
+        self.assertIsNone(result)
+    
+    def test_load_anchor_sequence_empty_file(self):
+        """Test loading anchor sequence from empty file."""
+        empty_file = os.path.join(self.temp_dir, "empty.txt")
+        with open(empty_file, 'w') as f:
+            f.write("")
+        
+        result = generate_quality_report.load_anchor_sequence(empty_file)
+        self.assertIsNone(result)
+    
+    def test_load_anchor_sequence_case_insensitive(self):
+        """Test that anchor sequence is converted to uppercase."""
+        text_file = os.path.join(self.temp_dir, "anchor_lower.txt")
+        test_seq = "aatgatacggcgaccaccgagatctacactatagccttcgtcggcagcgtc"
+        with open(text_file, 'w') as f:
+            f.write(f"{test_seq}\n")
+        
+        result = generate_quality_report.load_anchor_sequence(text_file)
+        self.assertEqual(result, test_seq.upper())
+
 
 if __name__ == '__main__':
     unittest.main()

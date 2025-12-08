@@ -364,5 +364,56 @@ class TestTwoTierMatching(unittest.TestCase):
         self.assertLessEqual(len(candidates), 1, "Should not have multiple candidates after two-tier matching")
 
 
+class TestAnchorSequenceLoading(unittest.TestCase):
+    """Test anchor sequence loading functionality."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.temp_dir = tempfile.mkdtemp()
+    
+    def tearDown(self):
+        """Clean up temporary files."""
+        import shutil
+        shutil.rmtree(self.temp_dir)
+    
+    def test_load_anchor_sequence_from_string(self):
+        """Test loading anchor sequence from a string."""
+        from demux_barcodes import load_anchor_sequence
+        anchor_seq = "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC"
+        result = load_anchor_sequence(anchor_seq)
+        self.assertEqual(result, anchor_seq)
+    
+    def test_load_anchor_sequence_from_fasta(self):
+        """Test loading anchor sequence from a FASTA file."""
+        from demux_barcodes import load_anchor_sequence
+        # Create a FASTA file
+        fasta_file = os.path.join(self.temp_dir, "anchor.fasta")
+        test_seq = "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC"
+        with open(fasta_file, 'w') as f:
+            f.write(">anchor_sequence\n")
+            f.write(f"{test_seq}\n")
+        
+        result = load_anchor_sequence(fasta_file)
+        self.assertEqual(result, test_seq)
+    
+    def test_load_anchor_sequence_from_text_file(self):
+        """Test loading anchor sequence from a plain text file."""
+        from demux_barcodes import load_anchor_sequence
+        # Create a plain text file
+        text_file = os.path.join(self.temp_dir, "anchor.txt")
+        test_seq = "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC"
+        with open(text_file, 'w') as f:
+            f.write(f"{test_seq}\n")
+        
+        result = load_anchor_sequence(text_file)
+        self.assertEqual(result, test_seq)
+    
+    def test_load_anchor_sequence_none(self):
+        """Test loading anchor sequence with None input."""
+        from demux_barcodes import load_anchor_sequence
+        result = load_anchor_sequence(None)
+        self.assertIsNone(result)
+
+
 if __name__ == "__main__":
     unittest.main()

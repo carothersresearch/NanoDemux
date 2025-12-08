@@ -58,12 +58,13 @@ def load_anchor_sequence(anchor_input):
         
         # Try to read as FASTA first
         try:
-            records = list(SeqIO.parse(anchor_input, "fasta"))
-            if records:
-                # Use the first sequence in the FASTA file
-                sequence = str(records[0].seq).upper().strip()
-                print(f"  Loaded anchor sequence from FASTA ({len(sequence)} bp)")
-                return sequence
+            with open(anchor_input, 'r') as f:
+                records = list(SeqIO.parse(f, "fasta"))
+                if records:
+                    # Use the first sequence in the FASTA file
+                    sequence = str(records[0].seq).upper().strip()
+                    print(f"  Loaded anchor sequence from FASTA ({len(sequence)} bp)")
+                    return sequence
         except Exception:
             # Not a valid FASTA file, try reading as plain text
             pass
