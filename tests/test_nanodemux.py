@@ -21,6 +21,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 class TestNanodemuxWorkflow(unittest.TestCase):
     """Test the comprehensive nanodemux workflow script."""
     
+    # Test barcode sequences
+    TEST_ROW_PRIMER = "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC"
+    TEST_COL_PRIMER = "CAAGCAGAAGACGGCATACGAGATATTACTCGGTCTCGTGGGCTCGG"
+    TEST_INSERT = "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG" * 5
+    
     def setUp(self):
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
@@ -47,12 +52,12 @@ class TestNanodemuxWorkflow(unittest.TestCase):
     def _create_barcode_csv(self):
         """Create a test barcode CSV file."""
         barcodes = [
-            ("A1", "R oDA373.D501", "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC"),
-            ("A1", "F oDA361.D701", "CAAGCAGAAGACGGCATACGAGATATTACTCGGTCTCGTGGGCTCGG"),
-            ("A2", "R oDA373.D501", "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC"),
+            ("A1", "R oDA373.D501", self.TEST_ROW_PRIMER),
+            ("A1", "F oDA361.D701", self.TEST_COL_PRIMER),
+            ("A2", "R oDA373.D501", self.TEST_ROW_PRIMER),
             ("A2", "F oDA362.D702", "CAAGCAGAAGACGGCATACGAGATTCCGGAGAGTCTCGTGGGCTCGG"),
             ("B1", "R oDA374.D502", "AATGATACGGCGACCACCGAGATCTACACATAGAGGCTCGTCGGCAGCGTC"),
-            ("B1", "F oDA361.D701", "CAAGCAGAAGACGGCATACGAGATATTACTCGGTCTCGTGGGCTCGG"),
+            ("B1", "F oDA361.D701", self.TEST_COL_PRIMER),
         ]
         
         df = pd.DataFrame(barcodes, columns=["Well Position", "Sequence Name", "Sequence"])
@@ -62,17 +67,12 @@ class TestNanodemuxWorkflow(unittest.TestCase):
         """Create a test FASTQ file with realistic sequences."""
         records = []
         
-        # Create a read with both row and column barcodes
-        row_primer = "AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC"
-        col_primer = "CAAGCAGAAGACGGCATACGAGATATTACTCGGTCTCGTGGGCTCGG"
-        insert = "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG" * 5
-        
         test_cases = [
-            (row_primer + insert + col_primer, "read_both_primers"),
-            (row_primer + insert, "read_row_only"),
-            (col_primer + insert, "read_col_only"),
-            ("ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG" * 5, "read_no_primers"),
-            (row_primer + insert + col_primer, "read_both_primers_2"),
+            (self.TEST_ROW_PRIMER + self.TEST_INSERT + self.TEST_COL_PRIMER, "read_both_primers"),
+            (self.TEST_ROW_PRIMER + self.TEST_INSERT, "read_row_only"),
+            (self.TEST_COL_PRIMER + self.TEST_INSERT, "read_col_only"),
+            (self.TEST_INSERT, "read_no_primers"),
+            (self.TEST_ROW_PRIMER + self.TEST_INSERT + self.TEST_COL_PRIMER, "read_both_primers_2"),
         ]
         
         for seq_str, read_id in test_cases:

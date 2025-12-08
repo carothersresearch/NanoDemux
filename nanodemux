@@ -19,6 +19,7 @@ import subprocess
 import shutil
 from datetime import datetime
 import json
+import pandas as pd
 
 
 def run_command(cmd, description):
@@ -63,7 +64,6 @@ def generate_comprehensive_report(output_dir, raw_report_dir, demux_dir, demux_r
     barcode_stats_file = os.path.join(demux_dir, "barcode_stats.csv")
     barcode_stats_html = ""
     if os.path.exists(barcode_stats_file):
-        import pandas as pd
         df = pd.read_csv(barcode_stats_file)
         barcode_stats_html = df.to_html(index=False, classes='table table-striped')
     
