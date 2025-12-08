@@ -263,6 +263,10 @@ Examples:
       --output results/ --cpus 4 --flank 150 --max-penalty 80 \\
       --anchor-seq AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC \\
       --min-quality 25 --max-reads 1000
+  
+  # Using anchor sequence from file
+  nanodemux raw_data/reads.fastq barcodes/primer_well_map.csv \\
+      --output results/ --cpus 4 --anchor-seq anchor_sequence.fasta
 
 The script will create the following structure in the output directory:
   output/
@@ -331,7 +335,7 @@ The script will create the following structure in the output directory:
     # Demultiplexed quality report options
     demux_qc_group = parser.add_argument_group('Demultiplexed Quality Report Options')
     demux_qc_group.add_argument('--anchor-seq',
-                                help='Anchor/reference sequence for MSA alignment')
+                                help='Anchor/reference sequence for MSA alignment. Can be either a sequence string or a file path (FASTA or plain text)')
     demux_qc_group.add_argument('--demux-max-reads', 
                                 type=int,
                                 help='Max reads to show in MSA layout (default: 100)')

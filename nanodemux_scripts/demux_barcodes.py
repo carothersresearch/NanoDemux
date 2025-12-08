@@ -56,6 +56,65 @@ def get_basename_without_extensions(filename):
     # Fallback to standard splitext if no known extension found
     return os.path.splitext(basename)[0]
 
+
+def load_anchor_sequence(anchor_input):
+    """
+    Load anchor sequence from either a string or a file.
+    
+    Parameters:
+        anchor_input (str): Either a sequence string or a file path
+    
+    Returns:
+        str: The anchor sequence (uppercase, stripped of whitespace)
+    
+    The function tries to detect if the input is a file path by:
+    1. Checking if it's a valid file path
+    2. If it is a file, reads the sequence from it (supports FASTA or plain text)
+    3. If not a file, treats it as a sequence string
+    """
+    if not anchor_input:
+        return None
+    
+    # Check if input is a file path
+    if os.path.isfile(anchor_input):
+        print(f"Reading anchor sequence from file: {anchor_input}")
+        
+        # Try to read as FASTA first
+        try:
+            records = list(SeqIO.parse(anchor_input, "fasta"))
+            if records:
+                # Use the first sequence in the FASTA file
+                sequence = str(records[0].seq).upper().strip()
+                print(f"  Loaded anchor sequence from FASTA ({len(sequence)} bp)")
+                return sequence
+        except Exception:
+            # Not a valid FASTA file, try reading as plain text
+            pass
+        
+        # Read as plain text file
+        try:
+            with open(anchor_input, 'r') as f:
+                sequence = ""
+                for line in f:
+                    # Skip comment lines and empty lines
+                    line = line.strip()
+                    if line and not line.startswith('#') and not line.startswith('>'):
+                        sequence += line
+                sequence = sequence.upper().strip()
+                if sequence:
+                    print(f"  Loaded anchor sequence from text file ({len(sequence)} bp)")
+                    return sequence
+                else:
+                    print(f"  Warning: File is empty or contains no sequence data")
+                    return None
+        except Exception as e:
+            print(f"  Error reading file: {e}")
+            return None
+    else:
+        # Treat as sequence string
+        return anchor_input.upper().strip()
+
+
 # ---------------------------------
 # Barcode analysis
 # ---------------------------------
@@ -736,6 +795,12 @@ def main(fastq_input, barcode_csv, outdir, min_length, max_penalty, cpus, flank,
         generate_raw_report: Whether to generate raw data quality report before demultiplexing
         anchor_seq: Optional anchor/reference sequence for MSA in quality report
     """
+    # Validate and load anchor sequence if provided
+    if anchor_seq:
+        anchor_seq = load_anchor_sequence(anchor_seq)
+        if not anchor_seq:
+            print("⚠️  Warning: Could not load anchor sequence, continuing without it")
+    
     # Check if input is a file or directory
     if os.path.isfile(fastq_input):
         # Single file mode - use outdir as-is or adjust if not specified
@@ -801,6 +866,10 @@ Examples:
   python demux_barcodes.py raw_data/reads.fastq barcodes/251202_primer_well_map_DA.csv \\
       --report --anchor-seq AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC
   
+  # Generate quality report with anchor sequence from file
+  python demux_barcodes.py raw_data/reads.fastq barcodes/251202_primer_well_map_DA.csv \\
+      --report --anchor-seq anchor_sequence.fasta
+  
   # Generate raw data quality report before demultiplexing
   python demux_barcodes.py raw_data/reads.fastq barcodes/251202_primer_well_map_DA.csv \\
       --raw-report
@@ -828,7 +897,7 @@ Examples:
     parser.add_argument("--raw-report", action="store_true", 
                         help="Generate graphical quality report for raw (unmultiplexed) data before demultiplexing")
     parser.add_argument("--anchor-seq", default=None,
-                        help="Anchor/reference sequence for MSA alignment in quality report (optional)")
+                        help="Anchor/reference sequence for MSA alignment in quality report. Can be either a sequence string or a file path (FASTA or plain text) (optional)")
     args = parser.parse_args()
 
     main(args.fastq, args.barcodes, args.outdir, args.min_length, args.max_penalty, args.cpus, args.flank, args.adapter_file, args.var_q, args.use_fallback, args.report, args.raw_report, args.anchor_seq)
