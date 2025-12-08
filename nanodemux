@@ -18,6 +18,7 @@ import sys
 import subprocess
 import shutil
 from datetime import datetime
+from pathlib import Path
 import json
 import pandas as pd
 
@@ -251,39 +252,42 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic usage
+  # Basic usage (single FASTQ)
   nanodemux raw_data/reads.fastq barcodes/primer_well_map.csv
-  
-  # With custom output directory and more CPUs
-  nanodemux raw_data/reads.fastq barcodes/primer_well_map.csv \\
+
+  # Multiple FASTQ files (one output folder per file)
+  nanodemux raw_data/run1.fastq raw_data/run2.fastq barcodes/primer_well_map.csv \
       --output results/ --cpus 4
-  
+
   # With all custom parameters
-  nanodemux raw_data/reads.fastq barcodes/primer_well_map.csv \\
-      --output results/ --cpus 4 --flank 150 --max-penalty 80 \\
-      --anchor-seq AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC \\
+  nanodemux raw_data/reads.fastq barcodes/primer_well_map.csv \
+      --output results/ --cpus 4 --flank 150 --max-penalty 80 \
+      --anchor-seq AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC \
       --min-quality 25 --max-reads 1000
 
-The script will create the following structure in the output directory:
+For multiple FASTQs, the output directory will contain one subfolder per FASTQ:
   output/
-  ├── 1_raw_quality_report/          # Raw data quality analysis
-  ├── 2_demultiplexed/                # Demultiplexed FASTQ files by well
-  ├── 3_demux_quality_report/         # Quality report on demuxed data
-  ├── 4_aligned/                      # Aligned sequences and consensus
-  └── comprehensive_report.html       # Summary of all results
+  ├── sample1/                        # From sample1.fastq
+  │   ├── 1_raw_quality_report/
+  │   ├── 2_demultiplexed/
+  │   ├── 3_demux_quality_report/
+  │   ├── 4_aligned/
+  │   └── comprehensive_report.html
+  └── sample2/
         """
     )
     
     # Required arguments
     parser.add_argument('fastq', 
-                        help='Input FASTQ file (raw, unmultiplexed data)')
+                        nargs='+',
+                        help='Input FASTQ file(s) (raw, unmultiplexed data)')
     parser.add_argument('barcodes', 
                         help='CSV file with barcode-to-well mappings')
     
     # General workflow options
     parser.add_argument('--output', '-o', 
                         default='nanodemux_output',
-                        help='Output directory for all results (default: nanodemux_output)')
+                        help='Output directory for all results (default: nanodemux_output). For multiple FASTQs, subdirectories are created per FASTQ.')
     parser.add_argument('--skip-raw-qc', 
                         action='store_true',
                         help='Skip raw quality analysis step')
@@ -352,137 +356,141 @@ The script will create the following structure in the output directory:
     args = parser.parse_args()
     
     # Validate input files
-    if not os.path.exists(args.fastq):
-        print(f"Error: Input FASTQ file not found: {args.fastq}", file=sys.stderr)
+    missing_fastq = [f for f in args.fastq if not os.path.exists(f)]
+    if missing_fastq:
+        print(f"Error: FASTQ file(s) not found: {', '.join(missing_fastq)}", file=sys.stderr)
         sys.exit(1)
-    
+
     if not os.path.exists(args.barcodes):
         print(f"Error: Barcode CSV file not found: {args.barcodes}", file=sys.stderr)
         sys.exit(1)
-    
-    # Create output directory
+
+    # Create root output directory
     os.makedirs(args.output, exist_ok=True)
-    
-    # Define subdirectories
-    raw_report_dir = os.path.join(args.output, "1_raw_quality_report")
-    demux_dir = os.path.join(args.output, "2_demultiplexed")
-    demux_report_dir = os.path.join(args.output, "3_demux_quality_report")
-    align_dir = os.path.join(args.output, "4_aligned")
-    
+
     # Get script directory to find the other scripts
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    
+
     print(f"\n{'='*80}")
     print("NanoDemux Comprehensive Workflow")
     print(f"{'='*80}")
-    print(f"Input FASTQ: {args.fastq}")
+    print(f"Input FASTQ(s): {', '.join(args.fastq)}")
     print(f"Barcode CSV: {args.barcodes}")
-    print(f"Output directory: {args.output}")
+    print(f"Output root: {args.output}")
     print(f"{'='*80}\n")
-    
-    # Step 1: Raw quality analysis
-    if not args.skip_raw_qc:
+
+    reports = []  # Track reports for summary
+
+    for fastq_path in args.fastq:
+        sample_name = Path(fastq_path).stem
+        sample_output = args.output if len(args.fastq) == 1 else os.path.join(args.output, sample_name)
+        os.makedirs(sample_output, exist_ok=True)
+
+        # Define subdirectories per sample
+        raw_report_dir = os.path.join(sample_output, "1_raw_quality_report")
+        demux_dir = os.path.join(sample_output, "2_demultiplexed")
+        demux_report_dir = os.path.join(sample_output, "3_demux_quality_report")
+        align_dir = os.path.join(sample_output, "4_aligned")
+
+        print(f"Processing {fastq_path} -> {sample_output}")
+
+        # Step 1: Raw quality analysis
+        if not args.skip_raw_qc:
+            cmd = [
+                sys.executable,
+                os.path.join(script_dir, "nanodemux_scripts", "generate_raw_quality_report.py"),
+                fastq_path,
+                "--output", raw_report_dir
+            ]
+            if args.raw_max_reads:
+                cmd.extend(["--max-reads", str(args.raw_max_reads)])
+
+            run_command(cmd, f"Step 1: Raw Quality Analysis ({sample_name})")
+        else:
+            print(f"\n⊘ Skipping Step 1: Raw Quality Analysis ({sample_name})\n")
+
+        # Step 2: Demultiplex
         cmd = [
             sys.executable,
-            os.path.join(script_dir, "nanodemux_scripts", "generate_raw_quality_report.py"),
-            args.fastq,
-            "--output", raw_report_dir
-        ]
-        if args.raw_max_reads:
-            cmd.extend(["--max-reads", str(args.raw_max_reads)])
-        
-        run_command(cmd, "Step 1: Raw Quality Analysis")
-    else:
-        print(f"\n⊘ Skipping Step 1: Raw Quality Analysis\n")
-    
-    # Step 2: Demultiplex
-    cmd = [
-        sys.executable,
-        os.path.join(script_dir, "nanodemux_scripts", "demux_barcodes.py"),
-        args.fastq,
-        args.barcodes,
-        "--outdir", demux_dir,
-        "--min_length", str(args.min_length),
-        "--max_penalty", str(args.max_penalty),
-        "--cpus", str(args.cpus),
-        "--flank", str(args.flank),
-        "--var_q", str(args.var_q)
-    ]
-    
-    if args.adapters:
-        cmd.extend(["--adapters", args.adapters])
-    
-    if args.no_fallback:
-        cmd.append("--no-fallback")
-    
-    run_command(cmd, "Step 2: Demultiplexing")
-    
-    # Step 3: Quality report on demultiplexed data
-    if not args.skip_demux_qc:
-        cmd = [
-            sys.executable,
-            os.path.join(script_dir, "nanodemux_scripts", "generate_quality_report.py"),
-            demux_dir,
+            os.path.join(script_dir, "nanodemux_scripts", "demux_barcodes.py"),
+            fastq_path,
             args.barcodes,
-            "--output", demux_report_dir
+            "--outdir", demux_dir,
+            "--min_length", str(args.min_length),
+            "--max_penalty", str(args.max_penalty),
+            "--cpus", str(args.cpus),
+            "--flank", str(args.flank),
+            "--var_q", str(args.var_q)
         ]
-        
-        if args.anchor_seq:
-            cmd.extend(["--anchor-seq", args.anchor_seq])
-        
-        if args.demux_max_reads:
-            cmd.extend(["--max-reads", str(args.demux_max_reads)])
-        
-        run_command(cmd, "Step 3: Demultiplexed Data Quality Report")
-    else:
-        print(f"\n⊘ Skipping Step 3: Demultiplexed Data Quality Report\n")
-    
-    # Step 4: Alignment
-    if not args.skip_alignment:
-        cmd = [
-            sys.executable,
-            os.path.join(script_dir, "nanodemux_scripts", "align_wells.py"),
+
+        if args.adapters:
+            cmd.extend(["--adapters", args.adapters])
+
+        if args.no_fallback:
+            cmd.append("--no-fallback")
+
+        run_command(cmd, f"Step 2: Demultiplexing ({sample_name})")
+
+        # Step 3: Quality report on demultiplexed data
+        if not args.skip_demux_qc:
+            cmd = [
+                sys.executable,
+                os.path.join(script_dir, "nanodemux_scripts", "generate_quality_report.py"),
+                demux_dir,
+                args.barcodes,
+                "--output", demux_report_dir
+            ]
+
+            if args.anchor_seq:
+                cmd.extend(["--anchor-seq", args.anchor_seq])
+
+            if args.demux_max_reads:
+                cmd.extend(["--max-reads", str(args.demux_max_reads)])
+
+            run_command(cmd, f"Step 3: Demultiplexed Data Quality Report ({sample_name})")
+        else:
+            print(f"\n⊘ Skipping Step 3: Demultiplexed Data Quality Report ({sample_name})\n")
+
+        # Step 4: Alignment
+        if not args.skip_alignment:
+            cmd = [
+                sys.executable,
+                os.path.join(script_dir, "nanodemux_scripts", "align_wells.py"),
+                demux_dir,
+                align_dir,
+                "--min-quality", str(args.min_quality)
+            ]
+
+            if args.align_max_reads:
+                cmd.extend(["--max-reads", str(args.align_max_reads)])
+
+            if args.no_align:
+                cmd.append("--no-align")
+
+            run_command(cmd, f"Step 4: Sequence Alignment ({sample_name})")
+        else:
+            print(f"\n⊘ Skipping Step 4: Sequence Alignment ({sample_name})\n")
+
+        # Generate comprehensive report for this sample
+        report_file = generate_comprehensive_report(
+            sample_output,
+            raw_report_dir,
             demux_dir,
+            demux_report_dir,
             align_dir,
-            "--min-quality", str(args.min_quality)
-        ]
-        
-        if args.align_max_reads:
-            cmd.extend(["--max-reads", str(args.align_max_reads)])
-        
-        if args.no_align:
-            cmd.append("--no-align")
-        
-        run_command(cmd, "Step 4: Sequence Alignment")
-    else:
-        print(f"\n⊘ Skipping Step 4: Sequence Alignment\n")
-    
-    # Generate comprehensive report
-    report_file = generate_comprehensive_report(
-        args.output, 
-        raw_report_dir, 
-        demux_dir, 
-        demux_report_dir, 
-        align_dir,
-        args.fastq,
-        args.barcodes
-    )
-    
+            fastq_path,
+            args.barcodes
+        )
+
+        reports.append((sample_name, report_file))
+
+    # Print summary
     print(f"\n{'='*80}")
     print("✓ NanoDemux Workflow Complete!")
     print(f"{'='*80}")
     print(f"\nResults saved to: {args.output}")
-    print(f"Comprehensive report: {report_file}")
-    print(f"\nDirectory structure:")
-    print(f"  {args.output}/")
-    if not args.skip_raw_qc:
-        print(f"  ├── 1_raw_quality_report/")
-    print(f"  ├── 2_demultiplexed/")
-    if not args.skip_demux_qc:
-        print(f"  ├── 3_demux_quality_report/")
-    if not args.skip_alignment:
-        print(f"  ├── 4_aligned/")
-    print(f"  └── comprehensive_report.html")
+    for sample_name, report_file in reports:
+        print(f"  {sample_name}: {report_file}")
     print(f"\n{'='*80}\n")
 
 

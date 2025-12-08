@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NanoDemux Comprehensive Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        h3 {
+            color: #7f8c8d;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .stats-table {
+            width: 100%;
+            margin: 10px 0;
+        }
+        .stats-table td {
+            padding: 8px;
+        }
+        .stats-table td:first-child {
+            font-weight: bold;
+            width: 200px;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        .table th, .table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .table th {
+            background-color: #3498db;
+            color: white;
+        }
+        .table-striped tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .link-section {
+            margin: 15px 0;
+            padding: 15px;
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+        }
+        .link-section a {
+            color: #2980b9;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .link-section a:hover {
+            text-decoration: underline;
+        }
+        .timestamp {
+            color: #7f8c8d;
+            font-style: italic;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NanoDemux Comprehensive Workflow Report</h1>
+        <p class="timestamp">Generated: 2025-12-08 21:01:45</p>
+        
+        <div class="section">
+            <h2>Workflow Overview</h2>
+            <p>This report summarizes the complete NanoDemux workflow execution:</p>
+            <ol>
+                <li>Raw quality analysis (pre-demultiplexing)</li>
+                <li>Demultiplexing by barcodes</li>
+                <li>Quality report on demultiplexed data</li>
+                <li>Sequence alignment for each well</li>
+            </ol>
+        </div>
+        
+        <div class="section">
+            <h2>Input Parameters</h2>
+            <table class="stats-table">
+                <tr>
+                    <td>Input FASTQ:</td>
+                    <td><code>raw_data/251205_AR/KD2X25_1_group1.fastq</code></td>
+                </tr>
+                <tr>
+                    <td>Barcode CSV:</td>
+                    <td><code>barcodes/251205_demux_barcodes_AR.csv</code></td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h2>Output Directories</h2>
+            <div class="link-section">
+                <h3>1. Raw Quality Report</h3>
+                <p>Pre-demultiplexing quality analysis of the raw FASTQ data.</p>
+                <p>📂 Location: <code>nanodemux_output/251205_AR_batch/KD2X25_1_group1/1_raw_quality_report</code></p>
+                <p>📄 <a href="#">View Raw Quality Report</a></p>
+            </div>
+            
+            <div class="link-section">
+                <h3>2. Demultiplexed Data</h3>
+                <p>Reads separated by well based on barcode identification.</p>
+                <p>📂 Location: <code>nanodemux_output/251205_AR_batch/KD2X25_1_group1/2_demultiplexed</code></p>
+                <p>Contains individual FASTQ files for each well (e.g., A1_reads.fastq, A2_reads.fastq, etc.)</p>
+            </div>
+            
+            <div class="link-section">
+                <h3>3. Demultiplexed Quality Report</h3>
+                <p>Quality analysis of demultiplexed reads with MSA visualization.</p>
+                <p>📂 Location: <code>nanodemux_output/251205_AR_batch/KD2X25_1_group1/3_demux_quality_report</code></p>
+                <p>📄 <a href="3_demux_quality_report/quality_report.html">View Demultiplexed Quality Report</a></p>
+            </div>
+            
+            <div class="link-section">
+                <h3>4. Aligned Sequences</h3>
+                <p>Multiple sequence alignment and consensus sequences for each well.</p>
+                <p>📂 Location: <code>nanodemux_output/251205_AR_batch/KD2X25_1_group1/4_aligned</code></p>
+                <p>📄 <a href="4_aligned/consensus_sequences.csv">View Consensus Sequences CSV</a></p>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Barcode Statistics</h2>
+            <table border="1" class="dataframe table table-striped">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Unnamed: 0</th>
+      <th>1</th>
+      <th>2</th>
+      <th>3</th>
+      <th>4</th>
+      <th>5</th>
+      <th>6</th>
+      <th>7</th>
+      <th>8</th>
+      <th>9</th>
+      <th>10</th>
+      <th>11</th>
+      <th>12</th>
+      <th>X</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>A</td>
+      <td>0</td>
+      <td>1</td>
+      <td>2</td>
+      <td>4</td>
+      <td>1</td>
+      <td>1</td>
+      <td>8</td>
+      <td>10</td>
+      <td>7</td>
+      <td>5</td>
+      <td>11.0</td>
+      <td>0.0</td>
+      <td>9.0</td>
+    </tr>
+    <tr>
+      <td>B</td>
+      <td>2</td>
+      <td>1</td>
+      <td>2</td>
+      <td>2</td>
+      <td>7</td>
+      <td>5</td>
+      <td>10</td>
+      <td>3</td>
+      <td>3</td>
+      <td>7</td>
+      <td>2.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+    </tr>
+    <tr>
+      <td>C</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>D</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>E</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>F</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>G</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>H</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>X</td>
+      <td>0</td>
+      <td>0</td>
+      <td>2</td>
+      <td>2</td>
+      <td>3</td>
+      <td>4</td>
+      <td>2</td>
+      <td>5</td>
+      <td>6</td>
+      <td>6</td>
+      <td>9.0</td>
+      <td>2.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <td>Stats</td>
+      <td>total</td>
+      <td>length_ok</td>
+      <td>mapped</td>
+      <td>single</td>
+      <td>adapter_only</td>
+      <td>no_match</td>
+      <td>too_short</td>
+      <td>ambiguous_multiple_cols</td>
+      <td>ambiguous_multiple_rows</td>
+      <td>ambiguous_multiple_rows_and_cols</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <td>NaN</td>
+      <td>5000</td>
+      <td>192</td>
+      <td>96</td>
+      <td>51</td>
+      <td>13</td>
+      <td>0</td>
+      <td>4808</td>
+      <td>31</td>
+      <td>1</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+  </tbody>
+</table>
+        </div>
+        
+        <div class="section">
+            <h2>Workflow Status</h2>
+            <p style="color: green; font-weight: bold; font-size: 18px;">✓ All steps completed successfully!</p>
+        </div>
+    </div>
+</body>
+</html>
