@@ -263,6 +263,8 @@ Example:
 | `--max_penalty` | `60` | Maximum quality-weighted mismatch penalty (higher = more tolerant) |
 | `--cpus` | `1` | Number of CPU cores for parallel processing |
 | `--flank` | `100` | Number of bases at each read end to search for barcodes |
+| `--var_q` | `10` | Phred quality cutoff to call a variable-base match 'confident' |
+| `--no-fallback` | `False` | Disable alignment fallback for ambiguous cases (use only fast filter) |
 | `--adapters` | `None` | Optional Python file defining ADAPTERS list for adapter detection |
 | `--report` | `False` | Generate graphical quality report with MSA, read lengths, and barcode analysis |
 | `--raw-report` | `False` | Generate graphical quality report for raw (unmultiplexed) data |
