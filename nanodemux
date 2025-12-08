@@ -1,0 +1,490 @@
+#!/usr/bin/env python3
+"""
+NanoDemux Comprehensive Workflow Script
+
+This script runs the complete NanoDemux workflow:
+1. Raw quality analysis (pre-demultiplexing)
+2. Demultiplex reads by barcodes
+3. Quality report on demultiplexed data
+4. Alignment for each well
+5. Generate comprehensive HTML report with all information
+
+All parameters from each step are exposed for fine-tuning.
+"""
+
+import argparse
+import os
+import sys
+import subprocess
+import shutil
+from datetime import datetime
+import json
+
+
+def run_command(cmd, description):
+    """Run a command and report progress."""
+    print(f"\n{'='*80}")
+    print(f"Running: {description}")
+    print(f"Command: {' '.join(cmd)}")
+    print(f"{'='*80}\n")
+    
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    
+    # Print stdout and stderr
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print(result.stderr, file=sys.stderr)
+    
+    if result.returncode != 0:
+        print(f"\n❌ ERROR: {description} failed with exit code {result.returncode}", file=sys.stderr)
+        sys.exit(result.returncode)
+    
+    print(f"\n✓ {description} completed successfully\n")
+    return result
+
+
+def generate_comprehensive_report(output_dir, raw_report_dir, demux_dir, demux_report_dir, align_dir, input_fastq, barcode_csv):
+    """Generate a comprehensive HTML report combining all results."""
+    report_file = os.path.join(output_dir, "comprehensive_report.html")
+    
+    # Collect statistics from various outputs
+    stats = {
+        "workflow_completed": datetime.now().isoformat(),
+        "input_fastq": input_fastq,
+        "barcode_csv": barcode_csv,
+        "raw_report_dir": raw_report_dir,
+        "demux_dir": demux_dir,
+        "demux_report_dir": demux_report_dir,
+        "align_dir": align_dir,
+    }
+    
+    # Read barcode stats if available
+    barcode_stats_file = os.path.join(demux_dir, "barcode_stats.csv")
+    barcode_stats_html = ""
+    if os.path.exists(barcode_stats_file):
+        import pandas as pd
+        df = pd.read_csv(barcode_stats_file)
+        barcode_stats_html = df.to_html(index=False, classes='table table-striped')
+    
+    # Create comprehensive HTML report
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>NanoDemux Comprehensive Report</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }}
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        h1 {{
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }}
+        h2 {{
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }}
+        h3 {{
+            color: #7f8c8d;
+        }}
+        .section {{
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }}
+        .stats-table {{
+            width: 100%;
+            margin: 10px 0;
+        }}
+        .stats-table td {{
+            padding: 8px;
+        }}
+        .stats-table td:first-child {{
+            font-weight: bold;
+            width: 200px;
+        }}
+        .table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }}
+        .table th, .table td {{
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }}
+        .table th {{
+            background-color: #3498db;
+            color: white;
+        }}
+        .table-striped tr:nth-child(even) {{
+            background-color: #f2f2f2;
+        }}
+        .link-section {{
+            margin: 15px 0;
+            padding: 15px;
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+        }}
+        .link-section a {{
+            color: #2980b9;
+            text-decoration: none;
+            font-weight: bold;
+        }}
+        .link-section a:hover {{
+            text-decoration: underline;
+        }}
+        .timestamp {{
+            color: #7f8c8d;
+            font-style: italic;
+        }}
+        code {{
+            background-color: #f4f4f4;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NanoDemux Comprehensive Workflow Report</h1>
+        <p class="timestamp">Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+        
+        <div class="section">
+            <h2>Workflow Overview</h2>
+            <p>This report summarizes the complete NanoDemux workflow execution:</p>
+            <ol>
+                <li>Raw quality analysis (pre-demultiplexing)</li>
+                <li>Demultiplexing by barcodes</li>
+                <li>Quality report on demultiplexed data</li>
+                <li>Sequence alignment for each well</li>
+            </ol>
+        </div>
+        
+        <div class="section">
+            <h2>Input Parameters</h2>
+            <table class="stats-table">
+                <tr>
+                    <td>Input FASTQ:</td>
+                    <td><code>{input_fastq}</code></td>
+                </tr>
+                <tr>
+                    <td>Barcode CSV:</td>
+                    <td><code>{barcode_csv}</code></td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h2>Output Directories</h2>
+            <div class="link-section">
+                <h3>1. Raw Quality Report</h3>
+                <p>Pre-demultiplexing quality analysis of the raw FASTQ data.</p>
+                <p>📂 Location: <code>{raw_report_dir}</code></p>
+                <p>📄 <a href="{os.path.relpath(os.path.join(raw_report_dir, 'quality_report.html'), output_dir) if os.path.exists(os.path.join(raw_report_dir, 'quality_report.html')) else '#'}">View Raw Quality Report</a></p>
+            </div>
+            
+            <div class="link-section">
+                <h3>2. Demultiplexed Data</h3>
+                <p>Reads separated by well based on barcode identification.</p>
+                <p>📂 Location: <code>{demux_dir}</code></p>
+                <p>Contains individual FASTQ files for each well (e.g., A1_reads.fastq, A2_reads.fastq, etc.)</p>
+            </div>
+            
+            <div class="link-section">
+                <h3>3. Demultiplexed Quality Report</h3>
+                <p>Quality analysis of demultiplexed reads with MSA visualization.</p>
+                <p>📂 Location: <code>{demux_report_dir}</code></p>
+                <p>📄 <a href="{os.path.relpath(os.path.join(demux_report_dir, 'quality_report.html'), output_dir) if os.path.exists(os.path.join(demux_report_dir, 'quality_report.html')) else '#'}">View Demultiplexed Quality Report</a></p>
+            </div>
+            
+            <div class="link-section">
+                <h3>4. Aligned Sequences</h3>
+                <p>Multiple sequence alignment and consensus sequences for each well.</p>
+                <p>📂 Location: <code>{align_dir}</code></p>
+                <p>📄 <a href="{os.path.relpath(os.path.join(align_dir, 'consensus_sequences.csv'), output_dir) if os.path.exists(os.path.join(align_dir, 'consensus_sequences.csv')) else '#'}">View Consensus Sequences CSV</a></p>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Barcode Statistics</h2>
+            {barcode_stats_html if barcode_stats_html else '<p>Barcode statistics file not found.</p>'}
+        </div>
+        
+        <div class="section">
+            <h2>Workflow Status</h2>
+            <p style="color: green; font-weight: bold; font-size: 18px;">✓ All steps completed successfully!</p>
+        </div>
+    </div>
+</body>
+</html>
+"""
+    
+    with open(report_file, 'w') as f:
+        f.write(html_content)
+    
+    print(f"\n{'='*80}")
+    print(f"✓ Comprehensive report generated: {report_file}")
+    print(f"{'='*80}\n")
+    
+    return report_file
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='NanoDemux Comprehensive Workflow - Run complete analysis pipeline',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Basic usage
+  nanodemux raw_data/reads.fastq barcodes/primer_well_map.csv
+  
+  # With custom output directory and more CPUs
+  nanodemux raw_data/reads.fastq barcodes/primer_well_map.csv \\
+      --output results/ --cpus 4
+  
+  # With all custom parameters
+  nanodemux raw_data/reads.fastq barcodes/primer_well_map.csv \\
+      --output results/ --cpus 4 --flank 150 --max-penalty 80 \\
+      --anchor-seq AATGATACGGCGACCACCGAGATCTACACTATAGCCTTCGTCGGCAGCGTC \\
+      --min-quality 25 --max-reads 1000
+
+The script will create the following structure in the output directory:
+  output/
+  ├── 1_raw_quality_report/          # Raw data quality analysis
+  ├── 2_demultiplexed/                # Demultiplexed FASTQ files by well
+  ├── 3_demux_quality_report/         # Quality report on demuxed data
+  ├── 4_aligned/                      # Aligned sequences and consensus
+  └── comprehensive_report.html       # Summary of all results
+        """
+    )
+    
+    # Required arguments
+    parser.add_argument('fastq', 
+                        help='Input FASTQ file (raw, unmultiplexed data)')
+    parser.add_argument('barcodes', 
+                        help='CSV file with barcode-to-well mappings')
+    
+    # General workflow options
+    parser.add_argument('--output', '-o', 
+                        default='nanodemux_output',
+                        help='Output directory for all results (default: nanodemux_output)')
+    parser.add_argument('--skip-raw-qc', 
+                        action='store_true',
+                        help='Skip raw quality analysis step')
+    parser.add_argument('--skip-demux-qc', 
+                        action='store_true',
+                        help='Skip demultiplexed quality analysis step')
+    parser.add_argument('--skip-alignment', 
+                        action='store_true',
+                        help='Skip alignment step')
+    
+    # Raw quality report options
+    raw_qc_group = parser.add_argument_group('Raw Quality Analysis Options')
+    raw_qc_group.add_argument('--raw-max-reads', 
+                              type=int,
+                              help='Maximum reads to analyze in raw QC (default: all)')
+    
+    # Demultiplexing options
+    demux_group = parser.add_argument_group('Demultiplexing Options')
+    demux_group.add_argument('--adapters', '-a',
+                             help='Python file defining ADAPTERS list')
+    demux_group.add_argument('--min-length', 
+                             type=int, 
+                             default=50,
+                             help='Minimum read length (default: 50)')
+    demux_group.add_argument('--max-penalty', 
+                             type=int, 
+                             default=60,
+                             help='Max mismatch penalty (sum of Phred scores) (default: 60)')
+    demux_group.add_argument('--cpus', 
+                             type=int, 
+                             default=1,
+                             help='Number of CPU cores for parallel processing (default: 1)')
+    demux_group.add_argument('--flank', 
+                             type=int, 
+                             default=100,
+                             help='Bases at each end to search for barcodes (default: 100)')
+    demux_group.add_argument('--var-q', 
+                             type=int, 
+                             default=10,
+                             help='Phred cutoff for variable-base match confidence (default: 10)')
+    demux_group.add_argument('--no-fallback', 
+                             action='store_true',
+                             help='Disable alignment fallback for ambiguous cases')
+    
+    # Demultiplexed quality report options
+    demux_qc_group = parser.add_argument_group('Demultiplexed Quality Report Options')
+    demux_qc_group.add_argument('--anchor-seq',
+                                help='Anchor/reference sequence for MSA alignment')
+    demux_qc_group.add_argument('--demux-max-reads', 
+                                type=int,
+                                help='Max reads to show in MSA layout (default: 100)')
+    
+    # Alignment options
+    align_group = parser.add_argument_group('Alignment Options')
+    align_group.add_argument('--align-max-reads', 
+                             type=int,
+                             help='Max reads to process per well in alignment (default: all)')
+    align_group.add_argument('--min-quality', 
+                             type=int, 
+                             default=20,
+                             help='Min Phred quality for consensus calling (default: 20)')
+    align_group.add_argument('--no-align', 
+                             action='store_true',
+                             help='Skip MSA, calculate consensus from unaligned sequences')
+    
+    args = parser.parse_args()
+    
+    # Validate input files
+    if not os.path.exists(args.fastq):
+        print(f"Error: Input FASTQ file not found: {args.fastq}", file=sys.stderr)
+        sys.exit(1)
+    
+    if not os.path.exists(args.barcodes):
+        print(f"Error: Barcode CSV file not found: {args.barcodes}", file=sys.stderr)
+        sys.exit(1)
+    
+    # Create output directory
+    os.makedirs(args.output, exist_ok=True)
+    
+    # Define subdirectories
+    raw_report_dir = os.path.join(args.output, "1_raw_quality_report")
+    demux_dir = os.path.join(args.output, "2_demultiplexed")
+    demux_report_dir = os.path.join(args.output, "3_demux_quality_report")
+    align_dir = os.path.join(args.output, "4_aligned")
+    
+    # Get script directory to find the other scripts
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    print(f"\n{'='*80}")
+    print("NanoDemux Comprehensive Workflow")
+    print(f"{'='*80}")
+    print(f"Input FASTQ: {args.fastq}")
+    print(f"Barcode CSV: {args.barcodes}")
+    print(f"Output directory: {args.output}")
+    print(f"{'='*80}\n")
+    
+    # Step 1: Raw quality analysis
+    if not args.skip_raw_qc:
+        cmd = [
+            sys.executable,
+            os.path.join(script_dir, "generate_raw_quality_report.py"),
+            args.fastq,
+            "--output", raw_report_dir
+        ]
+        if args.raw_max_reads:
+            cmd.extend(["--max-reads", str(args.raw_max_reads)])
+        
+        run_command(cmd, "Step 1: Raw Quality Analysis")
+    else:
+        print(f"\n⊘ Skipping Step 1: Raw Quality Analysis\n")
+    
+    # Step 2: Demultiplex
+    cmd = [
+        sys.executable,
+        os.path.join(script_dir, "demux_barcodes.py"),
+        args.fastq,
+        args.barcodes,
+        "--outdir", demux_dir,
+        "--min_length", str(args.min_length),
+        "--max_penalty", str(args.max_penalty),
+        "--cpus", str(args.cpus),
+        "--flank", str(args.flank),
+        "--var_q", str(args.var_q)
+    ]
+    
+    if args.adapters:
+        cmd.extend(["--adapters", args.adapters])
+    
+    if args.no_fallback:
+        cmd.append("--no-fallback")
+    
+    run_command(cmd, "Step 2: Demultiplexing")
+    
+    # Step 3: Quality report on demultiplexed data
+    if not args.skip_demux_qc:
+        cmd = [
+            sys.executable,
+            os.path.join(script_dir, "generate_quality_report.py"),
+            demux_dir,
+            args.barcodes,
+            "--output", demux_report_dir
+        ]
+        
+        if args.anchor_seq:
+            cmd.extend(["--anchor-seq", args.anchor_seq])
+        
+        if args.demux_max_reads:
+            cmd.extend(["--max-reads", str(args.demux_max_reads)])
+        
+        run_command(cmd, "Step 3: Demultiplexed Data Quality Report")
+    else:
+        print(f"\n⊘ Skipping Step 3: Demultiplexed Data Quality Report\n")
+    
+    # Step 4: Alignment
+    if not args.skip_alignment:
+        cmd = [
+            sys.executable,
+            os.path.join(script_dir, "align_wells.py"),
+            demux_dir,
+            align_dir,
+            "--min-quality", str(args.min_quality)
+        ]
+        
+        if args.align_max_reads:
+            cmd.extend(["--max-reads", str(args.align_max_reads)])
+        
+        if args.no_align:
+            cmd.append("--no-align")
+        
+        run_command(cmd, "Step 4: Sequence Alignment")
+    else:
+        print(f"\n⊘ Skipping Step 4: Sequence Alignment\n")
+    
+    # Generate comprehensive report
+    report_file = generate_comprehensive_report(
+        args.output, 
+        raw_report_dir, 
+        demux_dir, 
+        demux_report_dir, 
+        align_dir,
+        args.fastq,
+        args.barcodes
+    )
+    
+    print(f"\n{'='*80}")
+    print("✓ NanoDemux Workflow Complete!")
+    print(f"{'='*80}")
+    print(f"\nResults saved to: {args.output}")
+    print(f"Comprehensive report: {report_file}")
+    print(f"\nDirectory structure:")
+    print(f"  {args.output}/")
+    if not args.skip_raw_qc:
+        print(f"  ├── 1_raw_quality_report/")
+    print(f"  ├── 2_demultiplexed/")
+    if not args.skip_demux_qc:
+        print(f"  ├── 3_demux_quality_report/")
+    if not args.skip_alignment:
+        print(f"  ├── 4_aligned/")
+    print(f"  └── comprehensive_report.html")
+    print(f"\n{'='*80}\n")
+
+
+if __name__ == "__main__":
+    main()
