@@ -19,6 +19,7 @@ In pooled nanopore sequencing experiments, multiple samples are combined and seq
 
 - **Dual-indexing support**: Matches both row (A-H) and column (1-12) barcodes for 96-well plate demultiplexing
 - **Quality-aware matching**: Uses Phred quality scores to tolerate sequencing errors intelligently
+- **Sequence alignment**: Performs MSA and generates quality-weighted consensus sequences for each well
 - **Bidirectional search**: Searches both forward and reverse-complement orientations
 - **Multiprocessing**: Parallel processing for faster analysis of large datasets
 - **Comprehensive statistics**: Generates detailed mapping statistics and barcode match counts
@@ -31,6 +32,7 @@ In pooled nanopore sequencing experiments, multiple samples are combined and seq
 ```
 NanoDemux/
 ├── demux_barcodes.py          # Main demultiplexing script (supports single or multi-file)
+├── align_wells.py             # Sequence alignment and consensus generation for wells
 ├── benchmark_demux.py         # Benchmarking suite
 ├── run_tests.py               # Test runner
 ├── Makefile                   # Build automation and test targets
@@ -262,6 +264,73 @@ python generate_quality_report.py demplex_data/55XPXK_1_P4_323_EG/ barcodes/prim
 Reports are saved as HTML files with embedded visualizations:
 - Raw data reports: `raw_data_quality_report/raw_quality_report.html` (default) or in the output directory's `raw_quality_report/` subdirectory
 - Demultiplexed reports: `quality_report/` subdirectory of your demux output folder
+
+## Sequence Alignment and Consensus Generation
+
+After demultiplexing, you can perform multiple sequence alignment (MSA) and generate quality-weighted consensus sequences for each well using the `align_wells.py` script.
+
+### Features
+
+- **Quality-Weighted Consensus**: Uses Phred quality scores to calculate consensus sequences
+- **Multiple Sequence Alignment**: Performs pairwise Smith-Waterman alignment using parasail
+- **FASTQ Output**: Generates aligned FASTQ files with consensus as the first sequence
+- **CSV Summary**: Creates a comprehensive CSV with consensus sequences for all wells
+
+### Usage
+
+```bash
+# Basic usage - align all reads in each well
+python align_wells.py demplex_data/55XPXK_1_P4_323_EG/ aligned_output/
+
+# Limit reads per well for faster processing
+python align_wells.py demplex_data/experiment/ aligned_output/ --max-reads 100
+
+# Skip MSA and calculate consensus from unaligned sequences
+python align_wells.py demux_dir/ output_dir/ --no-align
+
+# Custom CSV output location
+python align_wells.py demux_dir/ output_dir/ --csv consensus_summary.csv
+```
+
+### Command-line Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `demux_dir` | (required) | Directory containing demultiplexed FASTQ files (`*_reads.fastq`) |
+| `output_dir` | (required) | Output directory for aligned FASTQ files and CSV summary |
+| `--max-reads` | `None` | Maximum number of reads to process per well (all reads by default) |
+| `--min-quality` | `20` | Minimum Phred quality score to consider a base for consensus |
+| `--no-align` | `False` | Skip MSA and calculate consensus from unaligned sequences |
+| `--csv` | `<output_dir>/consensus_sequences.csv` | Custom path for consensus CSV output |
+
+### Output Files
+
+**Aligned FASTQ files** (`<output_dir>/<WELL>_aligned.fastq`):
+- First sequence: Quality-weighted consensus sequence for the well
+- Remaining sequences: Original reads from the well
+
+**Consensus CSV** (`<output_dir>/consensus_sequences.csv`):
+- `Well`: Well identifier (e.g., A1, B5)
+- `Num_Reads`: Number of reads in the well
+- `Consensus_Length`: Length of the consensus sequence
+- `Consensus_Sequence`: The consensus sequence
+- `Avg_Coverage`: Average number of reads at each position
+- `Avg_Consensus_Quality`: Average Phred quality score of consensus
+- `Min_Coverage`, `Max_Coverage`: Coverage depth statistics
+
+### Example Workflow
+
+```bash
+# 1. Demultiplex reads
+python demux_barcodes.py raw_data/experiment.fastq barcodes/primer_map.csv --cpus 4
+
+# 2. Generate consensus sequences for each well
+python align_wells.py demplex_data/experiment/ aligned_wells/ --max-reads 500
+
+# 3. View results
+cat aligned_wells/consensus_sequences.csv
+head aligned_wells/A1_aligned.fastq
+```
 
 ## Input Files
 
